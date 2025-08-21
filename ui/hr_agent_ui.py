@@ -24,13 +24,28 @@ import pytesseract
 from dotenv import load_dotenv
 load_dotenv()
 
-# Page configuration
-st.set_page_config(
-    page_title="HR Agent Suite",
-    page_icon="🤖",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Clear session state to force fresh initialization (add this after imports)
+if 'scheduler_agent' in st.session_state:
+    del st.session_state.scheduler_agent
+if 'root_agent' in st.session_state:
+    del st.session_state.root_agent
+
+# Check for any LangGraph imports that might be causing issues
+# try:
+#     import langgraph
+#     st.warning("⚠️ LangGraph is still imported. This might cause issues.")
+# except ImportError:
+#     pass  # Good, LangGraph is not imported
+
+# Page configuration - only set if not already set
+if not hasattr(st, '_page_config_set'):
+    st.set_page_config(
+        page_title="HR Agent Suite",
+        page_icon="🤖",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+    st._page_config_set = True
 
 # Custom CSS
 st.markdown("""
@@ -134,6 +149,23 @@ def get_root_agent():
             st.error(f"Failed to initialize root agent: {e}")
             return None
     return st.session_state.root_agent
+
+def get_scheduler_agent():
+    """Get or initialize the scheduler agent"""
+    if st.session_state.scheduler_agent is None:
+        try:
+            # Force fresh import to avoid caching issues
+            import importlib
+            import agents.interview_scheduler.interview_scheduler_agent as scheduler_module
+            importlib.reload(scheduler_module)
+            
+            from agents.interview_scheduler.interview_scheduler_agent import InterviewSchedulerAgent
+            st.session_state.scheduler_agent = InterviewSchedulerAgent()
+            
+        except Exception as e:
+            st.error(f"Failed to initialize scheduler agent: {e}")
+            return None
+    return st.session_state.scheduler_agent
 
 def get_score_color(score):
     """Get color class based on score"""
@@ -543,25 +575,6 @@ def show_jd_generator(root_agent):
                 st.session_state.show_root_agent_input = False
                 st.rerun()
     
-    # Check if JD was just generated
-    if st.session_state.jd_generated and st.session_state.jd_content:
-        st.markdown("### Generated Job Description")
-        st.text_area("Job Description", st.session_state.jd_content, height=400, disabled=True)
-        
-        # Save button
-        if st.button("💾 Save Job Description", type="primary"):
-            try:
-                st.success("✅ Job description already saved!")
-            except Exception as e:
-                st.error(f"❌ Error saving job description: {str(e)}")
-        
-        # Option to generate new JD
-        if st.button("🔄 Generate New Job Description"):
-            st.session_state.jd_generated = False
-            st.session_state.jd_content = ""
-            st.session_state.jd_metadata = {}
-            st.rerun()
-    
     # Dynamic Form Generation based on LLM Response
     with st.form("jd_generator_form"):
         st.markdown("### 📋 Job Details")
@@ -573,116 +586,174 @@ def show_jd_generator(root_agent):
         col1, col2 = st.columns(2)
         
         with col1:
-            # Standard fields
-            standard_fields = ['job_title', 'company_name', 'experience_required', 'employment_type']
-            field_configs = {
-                'job_title': {'label': 'Job Title *', 'placeholder': 'e.g., Senior Software Engineer'},
-                'company_name': {'label': 'Company Name *', 'placeholder': 'e.g., TechCorp Inc.'},
-                'experience_required': {'label': 'Experience Required *', 'placeholder': 'e.g., 5+ years'},
-                'employment_type': {'label': 'Employment Type *', 'options': ['Full-time', 'Part-time', 'Contract', 'Internship']}
-            }
+            # First column - capture values directly
+            job_title = st.text_input(
+                'Job Title *',
+                value=parsed_details.get('job_title', ''),
+                placeholder='e.g., Senior Software Engineer',
+                key="form_job_title"
+            )
             
-            for field in standard_fields:
-                if field in field_configs:
-                    config = field_configs[field]
-                    if field == 'employment_type':
-                        # Handle dropdown
-                        index = 0
-                        if parsed_details.get(field):
-                            try:
-                                index = config['options'].index(parsed_details[field])
-                            except ValueError:
-                                index = 0
-                        value = st.selectbox(
-                            config['label'],
-                            config['options'],
-                            index=index
-                        )
-                    else:
-                        # Handle text input
-                        value = st.text_input(
-                            config['label'],
-                            value=parsed_details.get(field, ''),
-                            placeholder=config['placeholder']
-                        )
+            company_name = st.text_input(
+                'Company Name *',
+                value=parsed_details.get('company_name', ''),
+                placeholder='e.g., TechCorp Inc.',
+                key="form_company_name"
+            )
+            
+            experience_required = st.text_input(
+                'Experience Required *',
+                value=parsed_details.get('experience_required', ''),
+                placeholder='e.g., 5+ years',
+                key="form_experience_required"
+            )
+            
+            # Employment type dropdown
+            employment_options = ['Full-time', 'Part-time', 'Contract', 'Internship']
+            employment_index = 0
+            if parsed_details.get('employment_type'):
+                try:
+                    employment_index = employment_options.index(parsed_details['employment_type'])
+                except ValueError:
+                    employment_index = 0
+            
+            employment_type = st.selectbox(
+                'Employment Type *',
+                employment_options,
+                index=employment_index,
+                key="form_employment_type"
+            )
         
         with col2:
-            # More standard fields
-            standard_fields_2 = ['salary_range', 'industry', 'location', 'department']
-            field_configs_2 = {
-                'salary_range': {'label': 'Salary Range *', 'placeholder': 'e.g., $80,000 - $100,000'},
-                'industry': {'label': 'Industry', 'placeholder': 'e.g., Technology'},
-                'location': {'label': 'Location', 'placeholder': 'e.g., Remote'},
-                'department': {'label': 'Department', 'placeholder': 'e.g., Engineering'}
-            }
+            # Second column - capture values directly
+            salary_range = st.text_input(
+                'Salary Range *',
+                value=parsed_details.get('salary_range', ''),
+                placeholder='e.g., $80,000 - $100,000',
+                key="form_salary_range"
+            )
             
-            for field in standard_fields_2:
-                if field in field_configs_2:
-                    config = field_configs_2[field]
-                    value = st.text_input(
-                        config['label'],
-                        value=parsed_details.get(field, ''),
-                        placeholder=config['placeholder']
-                    )
+            industry = st.text_input(
+                'Industry',
+                value=parsed_details.get('industry', ''),
+                placeholder='e.g., Technology',
+                key="form_industry"
+            )
+            
+            location = st.text_input(
+                'Location',
+                value=parsed_details.get('location', ''),
+                placeholder='e.g., Remote',
+                key="form_location"
+            )
+            
+            department = st.text_input(
+                'Department',
+                value=parsed_details.get('department', ''),
+                placeholder='e.g., Engineering',
+                key="form_department"
+            )
         
         # Dynamic fields based on LLM response
-        dynamic_fields = {}
+        dynamic_form_data = {}
         for key, value in parsed_details.items():
-            if key not in standard_fields + standard_fields_2 + ['company_name'] and value:
-                dynamic_fields[key] = value
-        
-        # Display dynamic fields
-        if dynamic_fields:
-            st.markdown("### 🔧 Additional Requirements")
-            
-            # Handle different field types dynamically
-            for field_name, field_value in dynamic_fields.items():
-                field_label = field_name.replace('_', ' ').title()
+            if key not in ['job_title', 'company_name', 'experience_required', 'employment_type', 
+                          'salary_range', 'industry', 'location', 'department'] and value:
+                field_label = key.replace('_', ' ').title()
                 
-                if isinstance(field_value, str):
-                    if field_value.lower() in ['yes', 'no', 'not specified']:
+                if isinstance(value, str):
+                    if value.lower() in ['yes', 'no', 'not specified']:
                         # Boolean/choice field
                         options = ['Not specified', 'Yes', 'No']
                         index = 0
                         try:
-                            index = options.index(field_value)
+                            index = options.index(value)
                         except ValueError:
                             index = 0
-                        dynamic_fields[field_name] = st.selectbox(
+                        dynamic_form_data[key] = st.selectbox(
                             field_label,
                             options,
-                            index=index
+                            index=index,
+                            key=f"form_{key}"
                         )
                     else:
                         # Text field
-                        dynamic_fields[field_name] = st.text_input(
+                        dynamic_form_data[key] = st.text_input(
                             field_label,
-                            value=field_value,
-                            placeholder=f"Enter {field_label.lower()}"
+                            value=value,
+                            placeholder=f"Enter {field_label.lower()}",
+                            key=f"form_{key}"
                         )
         
         submitted = st.form_submit_button("🚀 Generate Job Description", type="primary")
         
         if submitted:
-            # Collect all form data
-            form_data = {}
-            
-            # Add standard fields
-            for field in standard_fields + standard_fields_2:
-                if field in parsed_details:
-                    form_data[field] = parsed_details[field]
+            # Collect all form data from actual form inputs
+            form_data = {
+                'job_title': job_title.strip(),
+                'company_name': company_name.strip(),
+                'experience_required': experience_required.strip(),
+                'employment_type': employment_type,
+                'salary_range': salary_range.strip(),
+                'industry': industry.strip(),
+                'location': location.strip(),
+                'department': department.strip()
+            }
             
             # Add dynamic fields
-            form_data.update(dynamic_fields)
+            form_data.update(dynamic_form_data)
             
-            # Validate required fields
-            required_fields = ['job_title', 'company_name', 'experience_required', 'employment_type', 'salary_range']
-            missing_fields = [field for field in required_fields if not form_data.get(field)]
-            
-            if missing_fields:
-                st.error(f"Please fill in all required fields: {', '.join(missing_fields)}")
-            else:
-                generate_job_description(root_agent, **form_data)
+            # Process form submission using JD Generator Agent
+            with st.spinner("🤖 Generating job description..."):
+                result = root_agent.jd_generator.process_form_submission(form_data)
+                
+                if result['success']:
+                    # Save to session state
+                    st.session_state.jd_generated = True
+                    st.session_state.jd_content = result['job_description']
+                    st.session_state.jd_metadata = result['job_details']
+                    st.success("✅ Job description generated successfully!")
+                    
+                    # Display the generated JD immediately
+                    st.markdown("### Generated Job Description")
+                    st.text_area("Job Description", result['job_description'], height=400, disabled=True)
+                    
+                else:
+                    if result['error'] == 'validation_failed':
+                        st.error(f"❌ {result['message']}")
+                        st.error(f"Missing fields: {result.get('missing_fields', [])}")
+                    else:
+                        st.error(f"❌ {result['message']}")
+    
+    # Move buttons outside the form
+    if st.session_state.get('jd_generated', False) and st.session_state.get('jd_content'):
+        st.markdown("### 📋 Job Description Actions")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Save button
+            if st.button("💾 Save Job Description", type="primary"):
+                try:
+                    # Get the current form data from session state
+                    current_form_data = st.session_state.get('jd_metadata', {})
+                    
+                    # Save using root agent
+                    save_result = root_agent.generate_job_description(current_form_data)
+                    if save_result['success']:
+                        st.success("✅ Job description saved successfully!")
+                    else:
+                        st.error(f"❌ Error saving job description: {save_result.get('error', 'Unknown error')}")
+                except Exception as e:
+                    st.error(f"❌ Error saving job description: {str(e)}")
+        
+        with col2:
+            # Option to generate new JD
+            if st.button("🔄 Generate New Job Description"):
+                st.session_state.jd_generated = False
+                st.session_state.jd_content = ""
+                st.session_state.jd_metadata = {}
+                st.session_state.parsed_job_details = {}  # Clear parsed details too
                 st.rerun()
 
 def generate_job_description(root_agent, job_title, company_name, experience_required, 
@@ -985,9 +1056,23 @@ def show_system_status(root_agent):
     st.json(config)
 
 def show_interview_scheduler(root_agent):
-    """Interview Scheduler Page - Integrated into main UI"""
-    st.markdown('<h2 class="sub-header">📧 Interview Scheduling Agent</h2>', unsafe_allow_html=True)
-    st.markdown("### AI-Powered Candidate Processing & Email Automation")
+    """Interview Scheduler Page"""
+    st.markdown('<h2 class="sub-header">📧 Interview Scheduler</h2>', unsafe_allow_html=True)
+    
+    # Debug section - add this temporarily
+    with st.expander("🔍 Debug: Scheduler Agent Status"):
+        try:
+            if 'scheduler_agent' in st.session_state:
+                scheduler = st.session_state.scheduler_agent
+                st.write(f"**Scheduler Agent Type:** {type(scheduler).__name__}")
+                st.write(f"**Scheduler Agent Class:** {scheduler.__class__.__name__}")
+                st.write(f"**Has process_candidate method:** {hasattr(scheduler, 'process_candidate')}")
+                if hasattr(scheduler, 'process_candidate'):
+                    st.write(f"**Method signature:** {scheduler.process_candidate.__code__.co_varnames}")
+            else:
+                st.write("**Scheduler Agent:** Not initialized")
+        except Exception as e:
+            st.error(f"Debug error: {e}")
     
     # Description
     st.markdown("""
@@ -1001,8 +1086,14 @@ def show_interview_scheduler(root_agent):
     # Initialize scheduler agent
     if 'scheduler_agent' not in st.session_state:
         try:
-            from agents.interview_scheduler.interview_scheduler_agent import InterviewSchedulerAgent, CandidateData
+            # Force fresh import to avoid caching issues
+            import importlib
+            import agents.interview_scheduler.interview_scheduler_agent as scheduler_module
+            importlib.reload(scheduler_module)
+            
+            from agents.interview_scheduler.interview_scheduler_agent import InterviewSchedulerAgent
             st.session_state.scheduler_agent = InterviewSchedulerAgent()
+            
         except Exception as e:
             st.error(f"Failed to initialize scheduler agent: {e}")
             return
@@ -1314,19 +1405,19 @@ def process_shortlist_integrated(candidate):
         if result['success']:
             st.success(f"✅ {result['message']}")
             
-            # Show interview details
-            if result['interview_details']:
+            # Show interview details if available
+            if 'interview_details' in result and result['interview_details']:
                 st.markdown("### 📅 Interview Details")
                 details = result['interview_details']
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.info(f"**Date:** {details['interview_date']}")
-                    st.info(f"**Time:** {details['interview_time']}")
+                    st.info(f"**Date:** {details.get('interview_date', 'TBD')}")
+                    st.info(f"**Time:** {details.get('interview_time', 'TBD')}")
                 
                 with col2:
-                    st.info(f"**Meeting Link:** {details['meet_link']}")
-                    st.info(f"**Confirmation:** {details['confirmation_link']}")
+                    st.info(f"**Meeting Link:** {details.get('meet_link', 'TBD')}")
+                    st.info(f"**Confirmation:** {details.get('confirmation_link', 'TBD')}")
             
             # Update candidate status
             candidate['status'] = 'shortlisted'
@@ -1381,7 +1472,9 @@ def show_email_preview_integrated(candidate, action):
     
     if action == 'shortlist':
         template = scheduler.shortlisted_template
-        interview_details = scheduler.schedule_interview(candidate['name'], candidate['job_title'])
+        
+        # Create placeholder interview details for preview
+        interview_details = scheduler._create_placeholder_interview(candidate['name'], candidate['job_title'])
         
         subject = template.subject.format(job_title=candidate['job_title'])
         body = template.body.format(
@@ -1389,10 +1482,12 @@ def show_email_preview_integrated(candidate, action):
             job_title=candidate['job_title'],
             company_name=candidate['company_name'],
             score=candidate['score'],
-            interview_date=interview_details['interview_date'],
-            interview_time=interview_details['interview_time'],
-            meet_link=interview_details['meet_link'],
-            confirmation_link=interview_details['confirmation_link'],
+            interview_date=interview_details.interview_date,
+            interview_time=interview_details.interview_time,
+            meet_link=interview_details.meet_link,
+            confirmation_link=interview_details.confirmation_link,
+            duration=interview_details.duration,
+            format=interview_details.format,
             hr_email=scheduler.hr_email
         )
     else:

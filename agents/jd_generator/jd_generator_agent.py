@@ -541,172 +541,206 @@ class LangGraphJDGenerator:
         
         return parsed
 
+    def validate_job_details_form(self, form_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate job details form data
+        Returns validation result with success status and any missing fields
+        """
+        required_fields = ['job_title', 'company_name', 'experience_required', 'employment_type', 'salary_range']
+        missing_fields = []
+        
+        # Check each required field
+        for field in required_fields:
+            value = form_data.get(field, '').strip()
+            if not value or value == '':
+                missing_fields.append(field)
+        
+        # Return validation result
+        return {
+            'success': len(missing_fields) == 0,
+            'missing_fields': missing_fields,
+            'validated_data': form_data if len(missing_fields) == 0 else None,
+            'message': f"Missing required fields: {', '.join(missing_fields)}" if missing_fields else "All required fields are valid"
+        }
+    
     def generate_dynamic_form_fields(self, parsed_details: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generate dynamic form field configurations based on parsed details
-        This can be used by any frontend (Streamlit, React, etc.) to render the form
+        Generate dynamic form fields based on LLM parsed details
+        Returns form configuration for UI rendering
         """
-        form_config = {
-            'standard_fields': {},
-            'dynamic_fields': {},
-            'field_order': []
-        }
-        
-        # Standard field configurations
+        # Standard form fields configuration
         standard_fields = {
             'job_title': {
                 'type': 'text',
                 'label': 'Job Title *',
                 'placeholder': 'e.g., Senior Software Engineer',
-                'required': True
+                'required': True,
+                'value': parsed_details.get('job_title', '')
             },
             'company_name': {
                 'type': 'text',
                 'label': 'Company Name *',
                 'placeholder': 'e.g., TechCorp Inc.',
-                'required': True
+                'required': True,
+                'value': parsed_details.get('company_name', '')
             },
             'experience_required': {
                 'type': 'text',
                 'label': 'Experience Required *',
                 'placeholder': 'e.g., 5+ years',
-                'required': True
+                'required': True,
+                'value': parsed_details.get('experience_required', '')
             },
             'employment_type': {
                 'type': 'select',
                 'label': 'Employment Type *',
                 'options': ['Full-time', 'Part-time', 'Contract', 'Internship'],
-                'required': True
+                'required': True,
+                'value': parsed_details.get('employment_type', 'Full-time')
             },
             'salary_range': {
                 'type': 'text',
                 'label': 'Salary Range *',
                 'placeholder': 'e.g., $80,000 - $100,000',
-                'required': True
+                'required': True,
+                'value': parsed_details.get('salary_range', '')
             },
             'industry': {
                 'type': 'text',
                 'label': 'Industry',
                 'placeholder': 'e.g., Technology',
-                'required': False
+                'required': False,
+                'value': parsed_details.get('industry', '')
             },
             'location': {
                 'type': 'text',
                 'label': 'Location',
                 'placeholder': 'e.g., Remote',
-                'required': False
+                'required': False,
+                'value': parsed_details.get('location', '')
             },
             'department': {
                 'type': 'text',
                 'label': 'Department',
                 'placeholder': 'e.g., Engineering',
-                'required': False
+                'required': False,
+                'value': parsed_details.get('department', '')
             }
         }
         
-        # Add standard fields with values
-        for field_name, config in standard_fields.items():
-            config['value'] = parsed_details.get(field_name, '')
-            form_config['standard_fields'][field_name] = config
-            form_config['field_order'].append(field_name)
-        
-        # Add dynamic fields based on parsed details
-        for field_name, field_value in parsed_details.items():
-            if field_name not in standard_fields and field_value:
-                # Determine field type based on value
-                if isinstance(field_value, str):
-                    if field_value.lower() in ['yes', 'no', 'not specified']:
-                        field_config = {
+        # Dynamic fields based on LLM response
+        dynamic_fields = {}
+        for key, value in parsed_details.items():
+            if key not in standard_fields and value:
+                field_label = key.replace('_', ' ').title()
+                
+                if isinstance(value, str):
+                    if value.lower() in ['yes', 'no', 'not specified']:
+                        # Boolean/choice field
+                        dynamic_fields[key] = {
                             'type': 'select',
-                            'label': field_name.replace('_', ' ').title(),
+                            'label': field_label,
                             'options': ['Not specified', 'Yes', 'No'],
-                            'value': field_value,
-                            'required': False
+                            'required': False,
+                            'value': value
                         }
                     else:
-                        field_config = {
+                        # Text field
+                        dynamic_fields[key] = {
                             'type': 'text',
-                            'label': field_name.replace('_', ' ').title(),
-                            'placeholder': f"Enter {field_name.replace('_', ' ').lower()}",
-                            'value': field_value,
-                            'required': False
+                            'label': field_label,
+                            'placeholder': f"Enter {field_label.lower()}",
+                            'required': False,
+                            'value': value
                         }
-                    
-                    form_config['dynamic_fields'][field_name] = field_config
-                    form_config['field_order'].append(field_name)
         
-        return form_config
-
-    def generate_job_description_from_natural_language(self, text: str) -> Dict[str, Any]:
+        return {
+            'standard_fields': standard_fields,
+            'dynamic_fields': dynamic_fields,
+            'form_config': {
+                'columns': 2,
+                'sections': [
+                    {
+                        'title': 'Job Details',
+                        'icon': '📋',
+                        'fields': ['job_title', 'company_name', 'experience_required', 'employment_type', 'salary_range', 'industry', 'location', 'department']
+                    },
+                    {
+                        'title': 'Additional Requirements',
+                        'icon': '🔧',
+                        'fields': list(dynamic_fields.keys())
+                    }
+                ]
+            }
+        }
+    
+    def process_form_submission(self, form_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Complete workflow: Parse natural language text and generate job description
-        This is the main method that can be called from any frontend
+        Process form submission and generate job description
+        Returns result with success status and generated content
         """
         try:
-            # Step 1: Parse natural language text
-            parsed_details = self.parse_job_details_from_natural_language(text)
+            # Validate form data
+            validation_result = self.validate_job_details_form(form_data)
             
-            # Step 2: Generate form configuration
-            form_config = self.generate_dynamic_form_fields(parsed_details)
+            if not validation_result['success']:
+                return {
+                    'success': False,
+                    'error': 'validation_failed',
+                    'message': validation_result['message'],
+                    'missing_fields': validation_result['missing_fields']
+                }
             
-            # Step 3: Create JobDetails object for generation
-            job_details = JobDetails(
-                job_title=parsed_details.get('job_title', ''),
-                experience_required=parsed_details.get('experience_required', ''),
-                company_name=parsed_details.get('company_name', 'Your Company'),
-                employment_type=parsed_details.get('employment_type', 'Full-time'),
-                salary_range=parsed_details.get('salary_range', ''),
-                industry=parsed_details.get('industry', 'Technology'),
-                location=parsed_details.get('location', 'Remote'),
-                department=parsed_details.get('department', 'General')
-            )
+            # Convert validated data to JobDetails object
+            validated_data = validation_result['validated_data']
+            job_details = JobDetails(**validated_data)
             
-            # Step 4: Generate job description using existing workflow
-            try:
-                description = self.generate_job_description(job_details)
-                generation_success = True
-            except Exception as e:
-                description = f"Error generating job description: {str(e)}"
-                generation_success = False
+            # Generate job description using existing workflow
+            description = self.generate_job_description(job_details)
             
             return {
                 'success': True,
-                'parsed_details': parsed_details,
-                'form_config': form_config,
-                'job_details': job_details.dict(),
-                'description': description,
-                'generation_success': generation_success,
-                'message': 'Job details parsed successfully'
+                'job_description': description,
+                'job_details': validated_data,
+                'message': 'Job description generated successfully'
             }
             
         except Exception as e:
             return {
                 'success': False,
-                'error': str(e),
-                'message': 'Failed to parse job details'
+                'error': 'generation_failed',
+                'message': f'Error generating job description: {str(e)}'
             }
-
-    def get_form_schema(self) -> Dict[str, Any]:
+    
+    def get_form_validation_rules(self) -> Dict[str, Any]:
         """
-        Get the complete form schema for frontend integration
-        This provides a standardized interface for any frontend (Streamlit, React, etc.)
+        Get form validation rules for UI implementation
+        Returns validation configuration that can be used by any UI framework
         """
         return {
-            'standard_fields': {
-                'job_title': {'type': 'text', 'required': True, 'label': 'Job Title'},
-                'company_name': {'type': 'text', 'required': True, 'label': 'Company Name'},
-                'experience_required': {'type': 'text', 'required': True, 'label': 'Experience Required'},
-                'employment_type': {'type': 'select', 'required': True, 'label': 'Employment Type', 'options': ['Full-time', 'Part-time', 'Contract', 'Internship']},
-                'salary_range': {'type': 'text', 'required': True, 'label': 'Salary Range'},
-                'industry': {'type': 'text', 'required': False, 'label': 'Industry'},
-                'location': {'type': 'text', 'required': False, 'label': 'Location'},
-                'department': {'type': 'text', 'required': False, 'label': 'Department'}
+            'required_fields': ['job_title', 'company_name', 'experience_required', 'employment_type', 'salary_range'],
+            'field_types': {
+                'job_title': 'text',
+                'company_name': 'text',
+                'experience_required': 'text',
+                'employment_type': 'select',
+                'salary_range': 'text',
+                'industry': 'text',
+                'location': 'text',
+                'department': 'text'
             },
-            'dynamic_field_types': {
-                'boolean': {'type': 'select', 'options': ['Not specified', 'Yes', 'No']},
-                'text': {'type': 'text'},
-                'list': {'type': 'textarea'},
-                'select': {'type': 'select'}
+            'validation_patterns': {
+                'job_title': r'^[a-zA-Z\s\-\.]+$',
+                'company_name': r'^[a-zA-Z\s\-\.&]+$',
+                'experience_required': r'^[\d\s\-\+]+(?:years?|yrs?)?$',
+                'salary_range': r'^[\$\d,\s\-]+$'
+            },
+            'error_messages': {
+                'job_title': 'Job title is required and should contain only letters, spaces, hyphens, and periods',
+                'company_name': 'Company name is required and should contain only letters, spaces, hyphens, periods, and ampersands',
+                'experience_required': 'Experience is required and should be in format like "5+ years" or "3-5 years"',
+                'employment_type': 'Employment type is required',
+                'salary_range': 'Salary range is required and should be in format like "$80,000 - $100,000"'
             }
         }
 
