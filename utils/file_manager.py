@@ -294,3 +294,72 @@ class FileManager:
             
         except Exception as e:
             return {}
+    
+    def get_all_job_descriptions(self) -> List[Dict[str, Any]]:
+        """Get all job descriptions with metadata"""
+        try:
+            jd_files = self.list_job_descriptions()
+            job_descriptions = []
+            
+            for jd_file in jd_files:
+                jd_content, jd_metadata = self.load_job_description(jd_file)
+                if jd_content and jd_metadata:
+                    job_descriptions.append({
+                        'filename': jd_file,
+                        'content': jd_content,
+                        'metadata': jd_metadata
+                    })
+            
+            return job_descriptions
+            
+        except Exception as e:
+            return []
+    
+    def get_all_analysis_results(self) -> List[Dict[str, Any]]:
+        """Get all analysis results"""
+        try:
+            analysis_files = self.list_analysis_results()
+            analysis_history = []
+            
+            for analysis_file in analysis_files:
+                analysis_data = self.load_analysis_result(analysis_file)
+                if analysis_data:
+                    analysis_history.append({
+                        'filename': analysis_file,
+                        'data': analysis_data
+                    })
+            
+            return analysis_history
+            
+        except Exception as e:
+            return []
+    
+    def delete_job_description_with_response(self, filename: str) -> Dict[str, Any]:
+        """Delete a job description file with response"""
+        try:
+            success = self.delete_job_description(filename)
+            return {
+                'success': success,
+                'message': 'Job description deleted successfully' if success else 'Failed to delete job description'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Failed to delete job description'
+            }
+    
+    def delete_analysis_result_with_response(self, filename: str) -> Dict[str, Any]:
+        """Delete an analysis result file with response"""
+        try:
+            success = self.delete_analysis_result(filename)
+            return {
+                'success': success,
+                'message': 'Analysis result deleted successfully' if success else 'Failed to delete analysis result'
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Failed to delete analysis result'
+            }

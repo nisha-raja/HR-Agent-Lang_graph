@@ -143,6 +143,17 @@ def initialize_session_state():
         st.session_state.candidates = []
     if 'selected_candidate' not in st.session_state:
         st.session_state.selected_candidate = None
+    if 'last_refresh_time' not in st.session_state:
+        st.session_state.last_refresh_time = datetime.now()
+
+def clear_session_cache():
+    """Clear session state cache to force fresh data loading"""
+    if 'candidates' in st.session_state:
+        del st.session_state.candidates
+    if 'selected_candidate' in st.session_state:
+        del st.session_state.selected_candidate
+    if 'last_refresh_time' in st.session_state:
+        del st.session_state.last_refresh_time
 
 def get_scheduler_agent():
     """Get or initialize the scheduler agent"""
@@ -173,6 +184,33 @@ def get_score_color_class(score):
     else:
         return "low-score"
 
+def check_for_new_analyses():
+    """Check if there are new analysis files and auto-refresh if needed"""
+    try:
+        root_agent = get_root_agent()
+        if root_agent is None:
+            return False
+        
+        # Get current analysis files
+        current_analysis_files = root_agent.file_manager.list_analysis_results()
+        
+        # Check if we have new files since last refresh
+        last_refresh = st.session_state.get('last_refresh_time', datetime.now())
+        
+        # Check if any analysis files are newer than last refresh
+        for filename in current_analysis_files:
+            filepath = root_agent.file_manager.analysis_results_dir / filename
+            if filepath.exists():
+                file_time = datetime.fromtimestamp(filepath.stat().st_mtime)
+                if file_time > last_refresh:
+                    return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"Error checking for new analyses: {e}")
+        return False
+
 def load_candidates_from_analysis():
     """Load candidates from analysis results"""
     try:
@@ -182,6 +220,9 @@ def load_candidates_from_analysis():
         
         analysis_history = root_agent.get_analysis_history()
         candidates = []
+        
+        # Debug: Print analysis history
+        print(f"DEBUG: Found {len(analysis_history)} analysis files")
         
         for analysis in analysis_history:
             data = analysis['data']
@@ -193,6 +234,9 @@ def load_candidates_from_analysis():
             
             # Get score
             overall_score = data.get('overall_score', 0)
+            
+            # Debug: Print each candidate being loaded
+            print(f"DEBUG: Loading candidate {candidate_name} with score {overall_score}")
             
             # Create candidate data
             candidate = {
@@ -208,6 +252,11 @@ def load_candidates_from_analysis():
             }
             
             candidates.append(candidate)
+        
+        # Debug: Print final candidate list
+        print(f"DEBUG: Total candidates loaded: {len(candidates)}")
+        for c in candidates:
+            print(f"DEBUG: {c['name']} ({c['score']}/100)")
         
         return candidates
         
@@ -361,12 +410,77 @@ def main():
     st.markdown('<h1 class="main-header">📧 Interview Scheduling Agent</h1>', unsafe_allow_html=True)
     st.markdown("### AI-Powered Candidate Processing & Email Automation")
     
-    # Load candidates
-    if not st.session_state.candidates:
+    # Check for new analyses and auto-refresh if needed
+    if check_for_new_analyses():
+        st.info("🔄 New analysis results detected! Refreshing candidate list...")
+        clear_session_cache()
         st.session_state.candidates = load_candidates_from_analysis()
+        st.session_state.last_refresh_time = datetime.now()
+        st.rerun()
+    
+    # Always load candidates dynamically (not just once)
+    st.session_state.candidates = load_candidates_from_analysis()
+    
+    # Update last refresh time
+    st.session_state.last_refresh_time = datetime.now()
+    
+    # Debug section - Show all loaded candidates
+    with st.expander("🔍 Debug: All Loaded Candidates", expanded=False):
+        st.write("**Total candidates loaded:**", len(st.session_state.candidates))
+        if st.session_state.candidates:
+            for i, candidate in enumerate(st.session_state.candidates):
+                st.write(f"{i+1}. {candidate['name']} ({candidate['score']}/100) - {candidate['analysis_date'][:10]}")
+        
+        # Search functionality
+        st.write("**Search for specific candidate:**")
+        search_name = st.text_input("Enter candidate name (partial match):", key="search_candidate")
+        if search_name:
+            matching_candidates = [c for c in st.session_state.candidates if search_name.lower() in c['name'].lower()]
+            if matching_candidates:
+                st.write(f"**Found {len(matching_candidates)} matching candidates:**")
+                for c in matching_candidates:
+                    st.write(f"- {c['name']} ({c['score']}/100)")
+            else:
+                st.write("**No matching candidates found**")
+        
+        # Specific search for Shanmugasundaram
+        st.write("**🔍 Quick Search for Shanmugasundaram:**")
+        shanmuga_candidates = [c for c in st.session_state.candidates if 'shanmugasundaram' in c['name'].lower()]
+        if shanmuga_candidates:
+            st.write(f"**Found {len(shanmuga_candidates)} Shanmugasundaram candidates:**")
+            for c in shanmuga_candidates:
+                st.write(f"- {c['name']} ({c['score']}/100) - {c['analysis_date'][:10]}")
+        else:
+            st.write("**No Shanmugasundaram candidates found**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔄 Force Refresh Candidates", type="secondary"):
+                clear_session_cache()
+                st.session_state.candidates = load_candidates_from_analysis()
+                st.rerun()
+        with col2:
+            if st.button("🗑️ Clear Cache", type="secondary"):
+                clear_session_cache()
+                st.rerun()
     
     # Sidebar for candidate selection
     st.sidebar.title(" Candidates")
+    
+    # Add refresh button in sidebar
+    if st.sidebar.button("🔄 Refresh Candidate List", type="primary", use_container_width=True):
+        clear_session_cache()
+        st.session_state.candidates = load_candidates_from_analysis()
+        st.session_state.last_refresh_time = datetime.now()
+        st.rerun()
+    
+    # Show status information
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**📊 Status:**")
+    st.sidebar.markdown(f"• **Candidates loaded:** {len(st.session_state.candidates)}")
+    if 'last_refresh_time' in st.session_state:
+        last_refresh = st.session_state.last_refresh_time.strftime("%H:%M:%S")
+        st.sidebar.markdown(f"• **Last refresh:** {last_refresh}")
     
     if st.session_state.candidates:
         candidate_names = [f"{c['name']} ({c['score']}/100)" for c in st.session_state.candidates]
@@ -399,7 +513,7 @@ def main():
         3. Send appropriate emails based on scores
         """)
         
-        if st.button(" Refresh Candidates"):
+        if st.button("🔄 Refresh Candidates"):
             st.session_state.candidates = load_candidates_from_analysis()
             st.rerun()
 

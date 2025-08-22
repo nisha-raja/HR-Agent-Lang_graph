@@ -348,6 +348,22 @@ class InterviewSchedulerAgent:
                 'message': f"Error processing candidate: {str(e)}"
             }
     
+    def process_candidate_with_data(self, candidate_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Process candidate with dict data input"""
+        try:
+            # Convert dict to CandidateData object
+            candidate_obj = CandidateData(**candidate_data)
+            
+            # Process candidate
+            return self.process_candidate(candidate_obj)
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Failed to process candidate for interview'
+            }
+    
     def get_interview_details_for_preview(self, candidate_name: str, job_title: str) -> InterviewDetails:
         """Get interview details for email preview"""
         return self._create_placeholder_interview(candidate_name, job_title)

@@ -358,25 +358,55 @@ class LangGraphJDGenerator:
         return workflow.compile()
     
     def generate_job_description(self, job_details: JobDetails) -> str:
-        """Generate a complete job description using LangGraph workflow"""
-        
-        # Initialize state
-        initial_state = JobDescriptionState(
-            job_details=job_details,
-            job_overview="",
-            responsibilities=[],
-            qualifications=[],
-            benefits=[],
-            final_description="",
-            current_step="start",
-            messages=[]
-        )
-        
-        # Create and run workflow
-        workflow = self.create_workflow()
-        result = workflow.invoke(initial_state)
-        
-        return result['final_description']
+        """Generate a complete job description"""
+        try:
+            # Initialize state
+            state = JobDescriptionState(
+                job_details=job_details,
+                job_overview="",
+                responsibilities=[],
+                qualifications=[],
+                benefits=[],
+                final_description="",
+                current_step="start",
+                messages=[]
+            )
+            
+            # Execute the workflow
+            final_state = self.workflow.invoke(state)
+            
+            return final_state['final_description']
+            
+        except Exception as e:
+            print(f"Error generating job description: {e}")
+            return f"Error: {str(e)}"
+    
+    def generate_job_description_with_save(self, job_details: Dict[str, Any], file_manager) -> Dict[str, Any]:
+        """Generate job description and save it using file manager"""
+        try:
+            # Convert dict to JobDetails object
+            job_details_obj = JobDetails(**job_details)
+            
+            # Generate job description
+            description = self.generate_job_description(job_details_obj)
+            
+            # Save job description using file manager
+            filename, metadata_filename = file_manager.save_job_description(job_details, description)
+            
+            return {
+                'success': True,
+                'description': description,
+                'filename': filename,
+                'metadata_filename': metadata_filename,
+                'message': 'Job description generated successfully'
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Failed to generate job description'
+            }
     
     def save_job_description(self, job_details: JobDetails, description: str) -> str:
         """Save job description to file and create metadata for resume analysis"""

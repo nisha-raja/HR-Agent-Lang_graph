@@ -78,9 +78,9 @@ def main():
                 choice = input("\nSelect operation (1-6): ").strip()
                 
                 if choice == '1':
-                    generate_job_description(root_agent)
+                    generate_job_description_flow(root_agent)
                 elif choice == '2':
-                    analyze_resume(root_agent)
+                    analyze_resume_flow(root_agent)
                 elif choice == '3':
                     view_job_descriptions(root_agent)
                 elif choice == '4':
@@ -106,117 +106,157 @@ def main():
         print("2. Required dependencies installed")
         print("3. Proper file permissions")
 
-def generate_job_description(root_agent: HRRootAgent):
-    """Generate a job description"""
-    print("\n📝 Job Description Generator")
-    print("-" * 30)
+def generate_job_description_flow(root_agent):
+    """Generate job description flow"""
+    print("\n📝 Job Description Generation")
+    print("=" * 40)
     
-    try:
-        # Get job details from user
-        job_details = {}
-        
-        job_details['job_title'] = input("Job Title: ").strip()
-        job_details['company_name'] = input("Company Name: ").strip()
-        job_details['experience_required'] = input("Experience Required (e.g., 5+ years): ").strip()
-        job_details['employment_type'] = input("Employment Type (Full-time/Part-time/Contract): ").strip()
-        job_details['salary_range'] = input("Salary Range (e.g., $80,000 - $100,000): ").strip()
-        
-        industry = input("Industry (press Enter for Technology): ").strip()
-        job_details['industry'] = industry if industry else "Technology"
-        
-        location = input("Location (press Enter for Remote): ").strip()
-        job_details['location'] = location if location else "Remote"
-        
-        department = input("Department (press Enter for General): ").strip()
-        job_details['department'] = department if department else "General"
-        
-        # Generate job description
-        print("\n🤖 Generating job description...")
-        result = root_agent.generate_job_description(job_details)
-        
-        if result['success']:
-            print("✅ Job description generated successfully!")
-            print(f"📁 Saved to: {result['filename']}")
-            print("\n📄 Generated Job Description:")
-            print("-" * 40)
-            print(result['description'])
-        else:
-            print(f"❌ Failed to generate job description: {result['error']}")
+    # Get job details from user
+    job_details = get_job_details_from_user()
     
-    except KeyboardInterrupt:
-        print("\n❌ Cancelled by user")
-    except Exception as e:
-        print(f"❌ Error: {e}")
+    print("\n🔄 Generating job description...")
+    result = root_agent.route_job_description_request(job_details)
+    
+    if result['success']:
+        print("✅ Job description generated successfully!")
+        print(f"📄 Saved as: {result['filename']}")
+        print("\n📋 Generated Job Description:")
+        print("-" * 50)
+        print(result['description'])
+    else:
+        print(f"❌ Error: {result['message']}")
 
-def analyze_resume(root_agent: HRRootAgent):
-    """Analyze a resume"""
-    print("\n📊 Resume Analyzer")
-    print("-" * 20)
+def analyze_resume_flow(root_agent):
+    """Analyze resume flow"""
+    print("\n📋 Resume Analysis")
+    print("=" * 40)
     
-    try:
-        # Get available job descriptions
-        job_descriptions = root_agent.get_available_job_descriptions()
+    # Get resume and job description data
+    resume_data, job_description_data = get_resume_analysis_input(root_agent)
+    
+    print("\n🔄 Analyzing resume...")
+    result = root_agent.route_resume_analysis_request(resume_data, job_description_data)
+    
+    if result['success']:
+        print("✅ Resume analysis completed!")
+        print(f"📊 Analysis saved as: {result['analysis_filename']}")
         
-        if not job_descriptions:
-            print("❌ No job descriptions available. Please generate a job description first.")
-            return
-        
-        # Select job description
-        print("Available Job Descriptions:")
-        for i, jd in enumerate(job_descriptions, 1):
-            print(f"{i}. {jd['metadata']['job_title']} at {jd['metadata']['company_name']}")
-        
-        choice = input(f"\nSelect job description (1-{len(job_descriptions)}): ").strip()
-        
-        if not choice.isdigit() or int(choice) < 1 or int(choice) > len(job_descriptions):
-            print("❌ Invalid choice.")
-            return
-        
-        selected_jd = job_descriptions[int(choice) - 1]
-        
-        # Get resume data
-        print("\n📄 Resume Information:")
-        resume_data = {}
-        resume_data['candidate_name'] = input("Candidate Name: ").strip()
-        resume_data['file_name'] = input("Resume File Name: ").strip()
-        
-        print("\nPaste resume content (press Enter twice when done):")
-        resume_lines = []
-        while True:
-            line = input()
-            if line == "" and resume_lines and resume_lines[-1] == "":
-                break
-            resume_lines.append(line)
-        
-        resume_data['content'] = "\n".join(resume_lines[:-1])
-        
-        # Prepare job description data
-        job_description_data = {
-            'content': selected_jd['content'],
-            'job_title': selected_jd['metadata']['job_title'],
-            'company_name': selected_jd['metadata']['company_name']
-        }
-        
-        # Analyze resume
-        print("\n🤖 Analyzing resume...")
-        result = root_agent.analyze_resume(resume_data, job_description_data)
+        analysis = result['analysis_result']
+        print(f"\n📈 Overall Score: {analysis['overall_score']}/100")
+        print(f"💪 Strengths: {', '.join(analysis['strengths'][:3])}")
+        print(f"⚠️ Weaknesses: {', '.join(analysis['weaknesses'][:3])}")
+    else:
+        print(f"❌ Error: {result['message']}")
+
+def process_interview_flow(root_agent):
+    """Process interview scheduling flow"""
+    print("\n📧 Interview Scheduling")
+    print("=" * 40)
+    
+    # Get candidate data from analysis history
+    candidate_data = get_candidate_data_from_history(root_agent)
+    
+    if candidate_data:
+        print("\n🔄 Processing candidate for interview...")
+        result = root_agent.route_interview_scheduling_request(candidate_data)
         
         if result['success']:
-            print("✅ Resume analysis completed!")
-            print(f"📁 Results saved to: {result['analysis_filename']}")
-            
-            analysis = result['analysis_result']
-            print(f"\n📊 Overall Score: {analysis['overall_score']}/100")
-            print(f"🎯 Skills Match: {analysis['skills_analysis'].get('skill_match_percentage', 0)}%")
-            print(f"💼 Experience Score: {analysis['experience_analysis'].get('experience_score', 0)}/100")
-            print(f"📝 Formatting Score: {analysis['formatting_analysis'].get('overall_formatting_score', 0)}/100")
+            print("✅ Interview processing completed!")
+            print(f"📧 {result['message']}")
         else:
-            print(f"❌ Failed to analyze resume: {result['error']}")
+            print(f"❌ Error: {result['message']}")
+    else:
+        print("❌ No candidate data available for processing")
+
+def get_job_details_from_user():
+    """Helper to get job details from user input"""
+    job_details = {}
+    job_details['job_title'] = input("Job Title: ").strip()
+    job_details['company_name'] = input("Company Name: ").strip()
+    job_details['experience_required'] = input("Experience Required (e.g., 5+ years): ").strip()
+    job_details['employment_type'] = input("Employment Type (Full-time/Part-time/Contract): ").strip()
+    job_details['salary_range'] = input("Salary Range (e.g., $80,000 - $100,000): ").strip()
     
-    except KeyboardInterrupt:
-        print("\n❌ Cancelled by user")
-    except Exception as e:
-        print(f"❌ Error: {e}")
+    industry = input("Industry (press Enter for Technology): ").strip()
+    job_details['industry'] = industry if industry else "Technology"
+    
+    location = input("Location (press Enter for Remote): ").strip()
+    job_details['location'] = location if location else "Remote"
+    
+    department = input("Department (press Enter for General): ").strip()
+    job_details['department'] = department if department else "General"
+    
+    return job_details
+
+def get_resume_analysis_input(root_agent):
+    """Helper to get resume and job description data for analysis"""
+    # Get available job descriptions
+    job_descriptions = root_agent.get_available_job_descriptions()
+    
+    if not job_descriptions:
+        print("❌ No job descriptions available. Please generate a job description first.")
+        return None, None
+    
+    # Select job description
+    print("Available Job Descriptions:")
+    for i, jd in enumerate(job_descriptions, 1):
+        print(f"{i}. {jd['metadata']['job_title']} at {jd['metadata']['company_name']}")
+    
+    choice = input(f"\nSelect job description (1-{len(job_descriptions)}): ").strip()
+    
+    if not choice.isdigit() or int(choice) < 1 or int(choice) > len(job_descriptions):
+        print("❌ Invalid choice.")
+        return None, None
+    
+    selected_jd = job_descriptions[int(choice) - 1]
+    
+    # Get resume data
+    print("\n📄 Resume Information:")
+    resume_data = {}
+    resume_data['candidate_name'] = input("Candidate Name: ").strip()
+    resume_data['file_name'] = input("Resume File Name: ").strip()
+    
+    print("\nPaste resume content (press Enter twice when done):")
+    resume_lines = []
+    while True:
+        line = input()
+        if line == "" and resume_lines and resume_lines[-1] == "":
+            break
+        resume_lines.append(line)
+    
+    resume_data['content'] = "\n".join(resume_lines[:-1])
+    
+    # Prepare job description data
+    job_description_data = {
+        'content': selected_jd['content'],
+        'job_title': selected_jd['metadata']['job_title'],
+        'company_name': selected_jd['metadata']['company_name']
+    }
+    
+    return resume_data, job_description_data
+
+def get_candidate_data_from_history(root_agent):
+    """Helper to get candidate data from analysis history for interview scheduling"""
+    analysis_history = root_agent.get_analysis_history()
+    
+    if not analysis_history:
+        print("❌ No analysis results available. Please analyze a resume first.")
+        return None
+    
+    print("\nAnalysis History:")
+    for i, analysis in enumerate(analysis_history, 1):
+        data = analysis['data']
+        metadata = data.get('metadata', {})
+        print(f"{i}. {metadata.get('candidate_name', 'Unknown')}")
+    
+    choice = input(f"\nSelect analysis result (1-{len(analysis_history)}) to process for interview: ").strip()
+    
+    if not choice.isdigit() or int(choice) < 1 or int(choice) > len(analysis_history):
+        print("❌ Invalid choice.")
+        return None
+    
+    selected_analysis = analysis_history[int(choice) - 1]
+    return selected_analysis['data']
 
 def view_job_descriptions(root_agent: HRRootAgent):
     """View available job descriptions"""

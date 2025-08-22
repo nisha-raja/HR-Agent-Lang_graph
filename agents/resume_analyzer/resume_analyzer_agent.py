@@ -566,67 +566,67 @@ class LangGraphResumeAnalyzer:
         return workflow.compile()
     
     def analyze_resume(self, resume_data: ResumeData, job_description_data: JobDescriptionData) -> Dict[str, Any]:
-        """Analyze resume against job description using LangGraph workflow"""
-        
-        # Input validation
-        validation_result = self.validate_inputs(resume_data, job_description_data)
-        if not validation_result['valid']:
+        """Analyze a resume against a job description"""
+        try:
+            # Initialize state
+            state = ResumeAnalysisState(
+                resume_data=resume_data,
+                job_description_data=job_description_data,
+                skills_analysis={},
+                experience_analysis={},
+                formatting_analysis={},
+                overall_score=0,
+                strengths=[],
+                weaknesses=[],
+                recommendations=[],
+                final_report="",
+                current_step="start",
+                messages=[]
+            )
+            
+            # Execute the workflow
+            final_state = self.create_workflow().invoke(state)
+            
+            return final_state
+            
+        except Exception as e:
+            print(f"Error analyzing resume: {e}")
             return {
                 'overall_score': 0,
-                'skills_analysis': {
-                    'skill_match_percentage': 0,
-                    'skill_score': 0,
-                    'analysis': validation_result['message']
-                },
-                'experience_analysis': {
-                    'experience_score': 0,
-                    'analysis': validation_result['message']
-                },
-                'formatting_analysis': {
-                    'overall_formatting_score': 0,
-                    'analysis': validation_result['message']
-                },
-                'strengths': ['None identified - insufficient content'],
-                'weaknesses': [validation_result['message']],
-                'recommendations': [
-                    'Provide more detailed resume content',
-                    'Include relevant work experience',
-                    'Add skills and qualifications',
-                    'Improve resume structure and formatting'
-                ],
-                'final_report': f"Analysis could not be completed: {validation_result['message']}"
+                'error': str(e)
             }
-        
-        # Initialize state
-        initial_state = ResumeAnalysisState(
-            resume_data=resume_data,
-            job_description_data=job_description_data,
-            skills_analysis={},
-            experience_analysis={},
-            formatting_analysis={},
-            overall_score=0,
-            strengths=[],
-            weaknesses=[],
-            recommendations=[],
-            final_report="",
-            current_step="start",
-            messages=[]
-        )
-        
-        # Create and run workflow
-        workflow = self.create_workflow()
-        result = workflow.invoke(initial_state)
-        
-        return {
-            'overall_score': result['overall_score'],
-            'skills_analysis': result['skills_analysis'],
-            'experience_analysis': result['experience_analysis'],
-            'formatting_analysis': result['formatting_analysis'],
-            'strengths': result['strengths'],
-            'weaknesses': result['weaknesses'],
-            'recommendations': result['recommendations'],
-            'final_report': result['final_report']
-        }
+    
+    def analyze_resume_with_save(self, resume_data: Dict[str, Any], job_description_data: Dict[str, Any], file_manager) -> Dict[str, Any]:
+        """Analyze resume and save results using file manager"""
+        try:
+            # Convert dicts to objects
+            resume_obj = ResumeData(**resume_data)
+            jd_obj = JobDescriptionData(**job_description_data)
+            
+            # Save resume file first
+            resume_filename = file_manager.save_resume(resume_data, resume_data.get('file_name', 'resume.txt'))
+            
+            # Analyze resume
+            analysis_result = self.analyze_resume(resume_obj, jd_obj)
+            
+            # Save analysis result
+            candidate_email = getattr(resume_obj, 'candidate_email', None)
+            analysis_filename = file_manager.save_analysis_result(analysis_result, resume_obj.candidate_name, candidate_email)
+            
+            return {
+                'success': True,
+                'analysis_result': analysis_result,
+                'analysis_filename': analysis_filename,
+                'resume_filename': resume_filename,
+                'message': 'Resume analysis completed successfully'
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'message': 'Failed to analyze resume'
+            }
     
     def validate_inputs(self, resume_data: ResumeData, job_description_data: JobDescriptionData) -> Dict[str, Any]:
         """Validate resume and job description inputs"""

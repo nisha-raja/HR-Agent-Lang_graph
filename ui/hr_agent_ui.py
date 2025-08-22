@@ -756,45 +756,156 @@ def show_jd_generator(root_agent):
                 st.session_state.parsed_job_details = {}  # Clear parsed details too
                 st.rerun()
 
-def generate_job_description(root_agent, job_title, company_name, experience_required, 
-                           employment_type, salary_range, industry, location, department):
-    """Generate job description using the root agent"""
+def generate_job_description_ui(root_agent):
+    """Generate job description UI"""
+    st.markdown("### 📝 Generate Job Description")
     
-    with st.spinner("🤖 Generating job description..."):
-        try:
-            # Prepare job details
-            job_details = {
-                'job_title': job_title,
-                'experience_required': experience_required,
-                'company_name': company_name,
-                'employment_type': employment_type,
-                'salary_range': salary_range,
-                'industry': industry,
-                'location': location,
-                'department': department
-            }
-            
-            # Generate job description using root agent
-            result = root_agent.generate_job_description(job_details)
-            
-            if result['success']:
-                # Save to session state
-                st.session_state.jd_generated = True
-                st.session_state.jd_content = result['description']
-                st.session_state.jd_metadata = job_details
+    with st.form("job_description_form"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            job_title = st.text_input("Job Title*", placeholder="e.g., Senior Software Engineer")
+            company_name = st.text_input("Company Name*", placeholder="e.g., Tech Corp")
+            experience_required = st.text_input("Experience Required*", placeholder="e.g., 5+ years")
+            employment_type = st.selectbox("Employment Type*", ["Full-time", "Part-time", "Contract", "Internship"])
+        
+        with col2:
+            salary_range = st.text_input("Salary Range*", placeholder="e.g., $80,000 - $100,000")
+            industry = st.text_input("Industry", value="Technology", placeholder="e.g., Technology")
+            location = st.text_input("Location", value="Remote", placeholder="e.g., Remote")
+            department = st.text_input("Department", value="Engineering", placeholder="e.g., Engineering")
+        
+        submitted = st.form_submit_button("🚀 Generate Job Description", type="primary")
+        
+        if submitted:
+            if job_title and company_name and experience_required and salary_range:
+                job_details = {
+                    'job_title': job_title,
+                    'company_name': company_name,
+                    'experience_required': experience_required,
+                    'employment_type': employment_type,
+                    'salary_range': salary_range,
+                    'industry': industry,
+                    'location': location,
+                    'department': department
+                }
                 
-                # Display success message
-                st.success("✅ Job description generated successfully!")
+                with st.spinner("🤖 Generating job description..."):
+                    result = root_agent.route_job_description_request(job_details)
                 
-                # Display the generated JD
-                st.markdown("### Generated Job Description")
-                st.text_area("Job Description", result['description'], height=400, disabled=True)
-                
+                if result['success']:
+                    st.success("✅ Job description generated successfully!")
+                    
+                    # Display the generated description
+                    st.markdown("### 📄 Generated Job Description")
+                    st.text_area("Job Description", result['description'], height=400, disabled=True)
+                    
+                    # Download button
+                    st.download_button(
+                        label="📥 Download Job Description",
+                        data=result['description'],
+                        file_name=f"{job_title.replace(' ', '_')}_job_description.txt",
+                        mime="text/plain"
+                    )
+                else:
+                    st.error(f"❌ Error: {result['message']}")
             else:
-                st.error(f"❌ Error generating job description: {result['error']}")
+                st.error("❌ Please fill in all required fields marked with *")
+
+def analyze_resume_ui(root_agent):
+    """Analyze resume UI"""
+    st.markdown("### 📋 Resume Analysis")
+    
+    # Get available job descriptions
+    job_descriptions = root_agent.get_available_job_descriptions()
+    
+    if not job_descriptions:
+        st.warning("⚠️ No job descriptions available. Please generate a job description first.")
+        return
+    
+    # Job description selection
+    jd_options = [f"{jd['metadata']['job_title']} at {jd['metadata']['company_name']}" for jd in job_descriptions]
+    selected_jd_index = st.selectbox("Select Job Description", range(len(jd_options)), format_func=lambda x: jd_options[x])
+    
+    selected_jd = job_descriptions[selected_jd_index]
+    
+    with st.form("resume_analysis_form"):
+        candidate_name = st.text_input("Candidate Name*", placeholder="e.g., John Doe")
+        candidate_email = st.text_input("Candidate Email", placeholder="e.g., john.doe@email.com")
+        
+        # Resume upload
+        uploaded_file = st.file_uploader("Upload Resume*", type=['txt', 'pdf', 'docx'], help="Upload resume file")
+        
+        # Or paste content
+        resume_content = st.text_area("Or Paste Resume Content", height=200, placeholder="Paste resume content here...")
+        
+        submitted = st.form_submit_button("🔍 Analyze Resume", type="primary")
+        
+        if submitted:
+            if candidate_name and (uploaded_file or resume_content):
+                # Process resume content
+                if uploaded_file:
+                    resume_text = extract_text_from_file(uploaded_file)
+                else:
+                    resume_text = resume_content
                 
-        except Exception as e:
-            st.error(f"❌ Error generating job description: {str(e)}")
+                resume_data = {
+                    'content': resume_text,
+                    'candidate_name': candidate_name,
+                    'candidate_email': candidate_email,
+                    'file_name': uploaded_file.name if uploaded_file else f"{candidate_name}_resume.txt"
+                }
+                
+                job_description_data = {
+                    'content': selected_jd['content'],
+                    'job_title': selected_jd['metadata']['job_title'],
+                    'company_name': selected_jd['metadata']['company_name']
+                }
+                
+                with st.spinner("🤖 Analyzing resume..."):
+                    result = root_agent.route_resume_analysis_request(resume_data, job_description_data)
+                
+                if result['success']:
+                    st.success("✅ Resume analysis completed!")
+                    
+                    analysis = result['analysis_result']
+                    
+                    # Display results
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        st.metric("Overall Score", f"{analysis['overall_score']}/100")
+                    
+                    with col2:
+                        skills_score = analysis['skills_analysis'].get('skill_score', 0)
+                        st.metric("Skills Score", f"{skills_score}/100")
+                    
+                    with col3:
+                        exp_score = analysis['experience_analysis'].get('experience_score', 0)
+                        st.metric("Experience Score", f"{exp_score}/100")
+                    
+                    # Detailed analysis
+                    with st.expander("📊 Detailed Analysis", expanded=True):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("**💪 Strengths:**")
+                            for strength in analysis['strengths'][:5]:
+                                st.write(f"• {strength}")
+                        
+                        with col2:
+                            st.markdown("**⚠️ Weaknesses:**")
+                            for weakness in analysis['weaknesses'][:5]:
+                                st.write(f"• {weakness}")
+                    
+                    # Recommendations
+                    with st.expander("💡 Recommendations"):
+                        for rec in analysis['recommendations'][:5]:
+                            st.write(f"• {rec}")
+                else:
+                    st.error(f"❌ Error: {result['message']}")
+            else:
+                st.error("❌ Please provide candidate name and resume content")
 
 def show_resume_analyzer(root_agent):
     """Resume Analyzer Page"""
