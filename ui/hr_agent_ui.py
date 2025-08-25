@@ -823,8 +823,39 @@ def analyze_resume_ui(root_agent):
         st.warning("⚠️ No job descriptions available. Please generate a job description first.")
         return
     
-    # Job description selection
-    jd_options = [f"{jd['metadata']['job_title']} at {jd['metadata']['company_name']}" for jd in job_descriptions]
+    # Job description selection with unique display names
+    jd_options = []
+    seen_combinations = set()
+    
+    for jd in job_descriptions:
+        job_title = jd['metadata']['job_title']
+        company_name = jd['metadata']['company_name']
+        combination = f"{job_title} at {company_name}"
+        
+        # If we've seen this combination before, add timestamp to make it unique
+        if combination in seen_combinations:
+            # Extract timestamp from filename or use generated_at from metadata
+            timestamp = jd['metadata'].get('generated_at', '')
+            if timestamp:
+                # Format timestamp for display
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    formatted_time = dt.strftime("%Y-%m-%d %H:%M")
+                    combination = f"{job_title} at {company_name} ({formatted_time})"
+                except:
+                    # Fallback: use filename timestamp
+                    filename = jd['filename']
+                    if '_' in filename and filename.endswith('_job_description.txt'):
+                        timestamp_part = filename.replace('_job_description.txt', '').split('_')[-1]
+                        combination = f"{job_title} at {company_name} ({timestamp_part})"
+            else:
+                # Fallback: use filename
+                combination = f"{job_title} at {company_name} ({jd['filename']})"
+        
+        seen_combinations.add(f"{job_title} at {company_name}")
+        jd_options.append(combination)
+    
     selected_jd_index = st.selectbox("Select Job Description", range(len(jd_options)), format_func=lambda x: jd_options[x])
     
     selected_jd = job_descriptions[selected_jd_index]
@@ -925,8 +956,39 @@ def show_resume_analyzer(root_agent):
     # Job Description Selection
     st.markdown("### 📋 Select Job Description to Analyze Against")
     
-    # Create a selection box for available JDs
-    jd_options = [f"{jd['metadata']['job_title']} at {jd['metadata']['company_name']}" for jd in job_descriptions]
+    # Create a selection box for available JDs with unique display names
+    jd_options = []
+    seen_combinations = set()
+    
+    for jd in job_descriptions:
+        job_title = jd['metadata']['job_title']
+        company_name = jd['metadata']['company_name']
+        combination = f"{job_title} at {company_name}"
+        
+        # If we've seen this combination before, add timestamp to make it unique
+        if combination in seen_combinations:
+            # Extract timestamp from filename or use generated_at from metadata
+            timestamp = jd['metadata'].get('generated_at', '')
+            if timestamp:
+                # Format timestamp for display
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    formatted_time = dt.strftime("%Y-%m-%d %H:%M")
+                    combination = f"{job_title} at {company_name} ({formatted_time})"
+                except:
+                    # Fallback: use filename timestamp
+                    filename = jd['filename']
+                    if '_' in filename and filename.endswith('_job_description.txt'):
+                        timestamp_part = filename.replace('_job_description.txt', '').split('_')[-1]
+                        combination = f"{job_title} at {company_name} ({timestamp_part})"
+            else:
+                # Fallback: use filename
+                combination = f"{job_title} at {company_name} ({jd['filename']})"
+        
+        seen_combinations.add(f"{job_title} at {company_name}")
+        jd_options.append(combination)
+    
     selected_jd_index = st.selectbox(
         "Choose a job description:",
         range(len(job_descriptions)),
@@ -1051,7 +1113,7 @@ def analyze_resume_with_jd(root_agent, file_name, resume_content, selected_jd, c
             }
             
             # Analyze the resume using root agent
-            result = root_agent.analyze_resume(resume_data, job_description_data)
+            result = root_agent.route_resume_analysis_request(resume_data, job_description_data)
             
             if result['success']:
                 # Save to session state
@@ -1165,6 +1227,12 @@ def show_system_status(root_agent):
     st.markdown("### Configuration")
     config = status['config']
     st.json(config)
+    
+    # Cleanup section
+    st.markdown("### 🧹 Cleanup Tools")
+    
+    if st.button("🔍 Show Duplicate Job Descriptions", help="Identify job descriptions with the same title and company"):
+        show_duplicate_job_descriptions(root_agent)
 
 def show_interview_scheduler(root_agent):
     """Interview Scheduler Page"""
@@ -1572,6 +1640,57 @@ def process_rejection_integrated(candidate):
     
     except Exception as e:
         st.error(f"❌ Error processing rejection: {str(e)}")
+
+def show_duplicate_job_descriptions(root_agent):
+    """Show duplicate job descriptions and allow cleanup"""
+    st.markdown("### 🔍 Duplicate Job Descriptions")
+    
+    job_descriptions = root_agent.get_available_job_descriptions()
+    
+    # Group by job title and company name
+    groups = {}
+    for jd in job_descriptions:
+        key = f"{jd['metadata']['job_title']} at {jd['metadata']['company_name']}"
+        if key not in groups:
+            groups[key] = []
+        groups[key].append(jd)
+    
+    # Show duplicates
+    duplicates_found = False
+    for key, jds in groups.items():
+        if len(jds) > 1:
+            duplicates_found = True
+            st.markdown(f"**{key}** ({len(jds)} duplicates):")
+            
+            for i, jd in enumerate(jds):
+                timestamp = jd['metadata'].get('generated_at', '')
+                if timestamp:
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                        formatted_time = dt.strftime("%Y-%m-%d %H:%M")
+                        display_name = f"  {i+1}. {jd['filename']} (Created: {formatted_time})"
+                    except:
+                        display_name = f"  {i+1}. {jd['filename']}"
+                else:
+                    display_name = f"  {i+1}. {jd['filename']}"
+                
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.text(display_name)
+                with col2:
+                    if st.button(f"🗑️ Delete", key=f"delete_{jd['filename']}"):
+                        result = root_agent.delete_job_description(jd['filename'])
+                        if result['success']:
+                            st.success(f"✅ Deleted {jd['filename']}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ Failed to delete: {result.get('error', 'Unknown error')}")
+            
+            st.markdown("---")
+    
+    if not duplicates_found:
+        st.success("✅ No duplicate job descriptions found!")
 
 def show_email_preview_integrated(candidate, action):
     """Show email preview"""

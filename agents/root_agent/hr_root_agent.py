@@ -11,7 +11,7 @@ from pathlib import Path
 # Add parent directories to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from agents.jd_generator.jd_generator_agent import LangGraphJDGenerator
+from agents.jd_generator.jd_generator_agent import SimpleRAGJDGenerator
 from agents.resume_analyzer.resume_analyzer_agent import LangGraphResumeAnalyzer
 from agents.interview_scheduler.interview_scheduler_agent import InterviewSchedulerAgent
 from utils.file_manager import FileManager
@@ -25,7 +25,7 @@ class HRRootAgent:
         self.file_manager = FileManager()
         
         # Initialize sub-agents
-        self.jd_generator = LangGraphJDGenerator()
+        self.jd_generator = SimpleRAGJDGenerator()
         self.resume_analyzer = LangGraphResumeAnalyzer()
         self.interview_scheduler = InterviewSchedulerAgent()
         
@@ -34,9 +34,13 @@ class HRRootAgent:
     
     # ==================== COORDINATION METHODS ====================
     
+    def generate_job_description(self, job_details: Dict[str, Any]) -> Dict[str, Any]:
+        """Generate job description using the RAG-enhanced JD Generator Agent"""
+        return self.jd_generator.generate_job_description_from_dict(job_details)
+    
     def route_job_description_request(self, job_details: Dict[str, Any]) -> Dict[str, Any]:
-        """Route job description generation to JD Generator Agent"""
-        return self.jd_generator.generate_job_description_with_save(job_details, self.file_manager)
+        """Route job description generation to JD Generator Agent (backward compatibility)"""
+        return self.generate_job_description(job_details)
     
     def route_resume_analysis_request(self, resume_data: Dict[str, Any], job_description_data: Dict[str, Any]) -> Dict[str, Any]:
         """Route resume analysis to Resume Analyzer Agent"""
@@ -51,6 +55,9 @@ class HRRootAgent:
     def get_system_status(self) -> Dict[str, Any]:
         """Get system status and health check"""
         try:
+            # Get RAG stats from JD generator
+            rag_stats = self.jd_generator.get_rag_stats()
+            
             return {
                 'status': 'healthy',
                 'agents': {
@@ -59,6 +66,7 @@ class HRRootAgent:
                     'interview_scheduler': 'active',
                     'root_agent': 'active'
                 },
+                'rag_system': rag_stats,
                 'directories': {
                     'job_descriptions': str(self.file_manager.job_descriptions_dir),
                     'resumes': str(self.file_manager.resumes_dir),
@@ -103,6 +111,14 @@ def main():
     # Get system status
     status = root_agent.get_system_status()
     print(f"System Status: {status['status']}")
+    
+    # Show RAG system status
+    if 'rag_system' in status:
+        rag_stats = status['rag_system']
+        print(f"RAG System: {rag_stats['status']}")
+        if rag_stats['status'] == 'active':
+            print(f" Documents in cache: {rag_stats['documents']}")
+            print(f" Method: {rag_stats['method']}")
     
     # Show available job descriptions
     job_descriptions = root_agent.get_available_job_descriptions()

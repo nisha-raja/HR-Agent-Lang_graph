@@ -587,7 +587,26 @@ class LangGraphResumeAnalyzer:
             # Execute the workflow
             final_state = self.create_workflow().invoke(state)
             
-            return final_state
+            # Convert Pydantic objects to dictionaries for JSON serialization
+            serializable_state = {}
+            for key, value in final_state.items():
+                if key == 'resume_data':
+                    serializable_state[key] = {
+                        'content': value.content,
+                        'candidate_name': value.candidate_name,
+                        'candidate_email': value.candidate_email,
+                        'file_name': value.file_name
+                    }
+                elif key == 'job_description_data':
+                    serializable_state[key] = {
+                        'content': value.content,
+                        'job_title': value.job_title,
+                        'company_name': value.company_name
+                    }
+                else:
+                    serializable_state[key] = value
+            
+            return serializable_state
             
         except Exception as e:
             print(f"Error analyzing resume: {e}")
