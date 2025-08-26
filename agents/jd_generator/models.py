@@ -16,6 +16,8 @@ class JobDetails(BaseModel):
     industry: str = Field(description="Industry or sector", default="Technology")
     location: str = Field(description="Job location", default="Remote")
     department: str = Field(description="Department or team", default="General")
+    skills_required: Optional[str] = Field(description="Required skills and technologies", default="")
+    work_location_type: Optional[str] = Field(description="Remote, On-site, Hybrid", default="Remote")
 
 class JobDescriptionRequest(BaseModel):
     """Request model for job description generation"""

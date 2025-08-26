@@ -245,8 +245,8 @@ class ResumeAnalyzerAgent:
         prompt = f"""
         Generate a comprehensive resume analysis report for {state['resume_data'].candidate_name}.
         
-        Job Title: {state['resume_data'].job_title}
-        Company: {state['resume_data'].company_name}
+        Job Title: {state['job_description_data'].job_title}
+        Company: {state['job_description_data'].company_name}
         Overall Score: {state['overall_score']}/100
         
         Skills Analysis: {state['skills_analysis']['analysis']}
@@ -322,18 +322,18 @@ class ResumeAnalyzerAgent:
             
             # Convert Pydantic objects to dictionaries for JSON serialization
             return {
-                "resume_data": final_state.resume_data.model_dump() if final_state.resume_data else None,
-                "job_description_data": final_state.job_description_data.model_dump() if final_state.job_description_data else None,
-                "skills_analysis": final_state.skills_analysis,
-                "experience_analysis": final_state.experience_analysis,
-                "formatting_analysis": final_state.formatting_analysis,
-                "overall_score": final_state.overall_score,
-                "strengths": final_state.strengths,
-                "weaknesses": final_state.weaknesses,
-                "recommendations": final_state.recommendations,
-                "final_report": final_state.final_report,
-                "current_step": final_state.current_step,
-                "messages": final_state.messages
+                "resume_data": final_state['resume_data'].model_dump() if final_state['resume_data'] else None,
+                "job_description_data": final_state['job_description_data'].model_dump() if final_state['job_description_data'] else None,
+                "skills_analysis": final_state['skills_analysis'],
+                "experience_analysis": final_state['experience_analysis'],
+                "formatting_analysis": final_state['formatting_analysis'],
+                "overall_score": final_state['overall_score'],
+                "strengths": final_state['strengths'],
+                "weaknesses": final_state['weaknesses'],
+                "recommendations": final_state['recommendations'],
+                "final_report": final_state['final_report'],
+                "current_step": final_state['current_step'],
+                "messages": final_state['messages']
             }
             
         except Exception as e:

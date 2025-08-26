@@ -1,270 +1,384 @@
-# 🤖 HR Agent Suite
+# PHOENKAI AI - HR Agent Suite
 
-**AI-Powered HR Automation Suite with Root Agent Architecture**
+A comprehensive HR management system with AI-powered agents for job description generation, resume analysis, and interview scheduling.
 
-A sophisticated HR automation system that uses a root agent to coordinate multiple specialized sub-agents for job description generation and resume analysis.
-
-## 🏗️ Architecture Overview
-
-The HR Agent Suite follows a **Root Agent Architecture** where a central coordinator manages all sub-agents:
-
-```
-HR Root Agent (Coordinator)
-├── JD Generator Agent
-├── Resume Analyzer Agent
-└── Utility Services
-    ├── File Manager
-    ├── Config Manager
-    └── Data Storage
-```
-
-## 📁 Project Structure
+## 🏗️ Project Structure
 
 ```
 hr-agent/
-├── agents/                          # All agent modules
-│   ├── root_agent/                  # Main coordinator agent
-│   │   ├── __init__.py
-│   │   └── hr_root_agent.py         # Root agent implementation
-│   ├── jd_generator/                # Job Description Generator
-│   │   ├── __init__.py
-│   │   └── jd_generator_agent.py    # JD generation logic
-│   ├── resume_analyzer/             # Resume Analyzer
-│   │   ├── __init__.py
-│   │   └── resume_analyzer_agent.py # Resume analysis logic
-│   └── interview_scheduler/         # Interview Scheduler
-│       ├── __init__.py
-│       └── interview_scheduler_agent.py # Interview scheduling logic
-├── data/                            # Data storage
-│   ├── job_descriptions/            # Generated job descriptions
-│   ├── resumes/                     # Uploaded resumes
-│   └── analysis_results/            # Analysis results
-├── utils/                           # Utility modules
-│   ├── __init__.py
-│   ├── file_manager.py              # File operations
-│   └── config_manager.py            # Configuration management
-├── config/                          # Configuration files
-│   └── config.json                  # System configuration
-├── ui/                              # User interface
-│   ├── hr_agent_ui.py               # Main Streamlit web UI
-│   └── interview_scheduler_ui.py    # Interview scheduler UI
-├── docs/                            # Documentation
-│   └── INTERVIEW_SCHEDULER.md       # Interview scheduler documentation
-├── main.py                          # CLI application entry point
-├── requirements.txt                 # Python dependencies
-├── env_example.txt                  # Environment variables template
-├── .gitignore                       # Git ignore rules
-└── README.md                        # This file
+├── agents/                          # AI Agent Modules
+│   ├── jd_generator/               # Job Description Generator Agent
+│   │   ├── agent.py                # Main agent logic
+│   │   ├── api.py                  # FastAPI endpoints
+│   │   ├── config.py               # Configuration
+│   │   ├── models.py               # Pydantic models
+│   │   ├── utils.py                # Utility functions
+│   │   └── __init__.py
+│   ├── resume_analyzer/            # Resume Analysis Agent
+│   │   ├── agent.py                # Main agent logic with LangGraph
+│   │   ├── api.py                  # FastAPI endpoints
+│   │   ├── config.py               # Configuration
+│   │   ├── models.py               # Pydantic models
+│   │   ├── utils.py                # Utility functions
+│   │   └── __init__.py
+│   ├── interview_scheduler/        # Interview Scheduling Agent
+│   │   ├── agent.py                # Main agent logic
+│   │   ├── api.py                  # FastAPI endpoints
+│   │   ├── config.py               # Configuration
+│   │   ├── models.py               # Pydantic models
+│   │   ├── utils.py                # Utility functions
+│   │   └── __init__.py
+│   └── root_agent/                 # Root Agent Coordinator
+│       ├── coordinator.py          # Main coordinator logic
+│       ├── api.py                  # FastAPI gateway
+│       └── __init__.py
+├── frontend/                       # React/Next.js Frontend
+│   ├── src/
+│   │   ├── app/                    # Next.js app router
+│   │   │   ├── page.tsx            # Dashboard
+│   │   │   ├── people/             # People management
+│   │   │   │   ├── page.tsx        # Overview
+│   │   │   │   ├── jd/             # Job Description Generator
+│   │   │   │   ├── resume/         # Resume Analyzer
+│   │   │   │   └── interview/      # Interview Scheduler
+│   │   │   └── layout.tsx          # Root layout
+│   │   ├── components/             # React components
+│   │   │   └── Layout/             # Layout components
+│   │   └── services/               # API services
+│   │       └── api.ts              # API client
+│   ├── package.json
+│   └── README.md
+├── data/                           # Data storage
+│   ├── job_descriptions/           # Generated job descriptions
+│   ├── resumes/                    # Uploaded resumes
+│   ├── analysis_results/           # Resume analysis results
+│   ├── email_templates/            # Email templates
+│   └── scheduling/                 # Interview schedules
+├── requirements.txt                # Python dependencies
+├── start_services.py               # Service startup script
+├── .env.example                    # Environment variables template
+└── README.md                       # This file
 ```
 
-## 🚀 Features
+## 🚀 How It Works
 
-### 🤖 Root Agent (Coordinator)
-- **Central Management**: Coordinates all sub-agents
-- **System Status**: Monitors agent health and system status
-- **Data Management**: Handles file operations and data persistence
-- **Configuration**: Manages system settings and configurations
-- **Error Handling**: Centralized error handling and recovery
+### Architecture Overview
 
-### 📝 Job Description Generator Agent
-- **AI-Powered Generation**: Uses GPT-4 for professional JD creation
-- **Structured Output**: Organized into clear sections:
-  - Job Overview
-  - **4-6 Core Responsibilities** (focused and impactful)
-  - **Three-Category Qualifications**:
-    - Education & Certifications
-    - Technical Skills
-    - Soft Skills & Competencies
-  - **4-6 Key Benefits** (quality over quantity)
-- **Industry-Specific**: Tailored to different industries and roles
-- **Inclusive Language**: Uses inclusive and engaging language
+The system follows a **microservices architecture** with independent, plug-and-play AI agents:
 
-### 📊 Resume Analyzer Agent
-- **Multi-Format Support**: PDF, DOCX, TXT, JPG, JPEG (with OCR)
-- **Comprehensive Analysis**: 100-point scoring system
-- **Three-Dimensional Scoring**:
-  - Skills Match (40% weight)
-  - Experience Relevance (35% weight)
-  - Formatting Quality (25% weight)
-- **Detailed Feedback**: Strengths, weaknesses, and recommendations
-- **Input Validation**: Robust validation to prevent false scores
+```
+┌─────────────────┐    HTTP/REST    ┌─────────────────┐
+│   React Frontend │ ◄─────────────► │  Root Agent     │
+│   (Port 3000)    │                 │  Gateway        │
+└─────────────────┘                 │  (Port 8000)    │
+                                    └─────────────────┘
+                                           │
+                                           │ Internal Calls
+                                           ▼
+                    ┌─────────────────────────────────────────┐
+                    │                                         │
+            ┌───────▼────────┐    ┌────────▼────────┐    ┌────▼────────┐
+            │ JD Generator    │    │ Resume Analyzer │    │ Interview   │
+            │ Agent           │    │ Agent           │    │ Scheduler   │
+            │ (Port 8001)     │    │ (Port 8002)     │    │ Agent       │
+            │                 │    │                 │    │ (Port 8003) │
+            └─────────────────┘    └─────────────────┘    └─────────────┘
+```
 
-### 🛠️ Utility Services
-- **File Manager**: Handles all file operations and data persistence
-- **Config Manager**: Manages system configuration and settings
-- **Data Organization**: Structured data storage and retrieval
+### Agent Communication Flow
 
-## 🎯 Key Improvements
+1. **Frontend** → **Root Agent Gateway** (Port 8000)
+   - All requests go through the Root Agent first
+   - Gateway routes requests to appropriate sub-agents
 
-### ✅ **Perfect Folder Structure**
-- **Modular Design**: Each agent in its own directory
-- **Clear Separation**: Agents, utilities, data, and UI separated
-- **Scalable Architecture**: Easy to add new agents or features
+2. **Root Agent** → **Sub-Agents** (Ports 8001, 8002, 8003)
+   - Internal method calls to sub-agents
+   - Each agent is independently deployable
 
-### ✅ **Root Agent Coordination**
-- **Single Point of Control**: All operations go through the root agent
-- **Centralized Management**: System status, configuration, and data management
-- **Better Error Handling**: Centralized error handling and recovery
+3. **Data Flow**:
+   - Frontend sends data in standardized format
+   - Root Agent transforms data for sub-agents
+   - Sub-agents process and return results
+   - Results are transformed back to frontend format
 
-### ✅ **Enhanced Job Descriptions**
-- **Focused Content**: 4-6 core responsibilities instead of 6-8
-- **Structured Qualifications**: Three clear categories
-- **Concise Benefits**: 4-6 key benefits instead of comprehensive lists
+### Key Components
 
-### ✅ **Improved Resume Analysis**
-- **Better Validation**: More lenient input validation
-- **Accurate Scoring**: Fixed scoring issues for legitimate content
-- **Multi-Format Support**: PDF, DOCX, TXT, JPG, JPEG with OCR
+#### 1. **JD Generator Agent** (Port 8001)
+- **Purpose**: Generate comprehensive job descriptions using AI
+- **Input**: Job requirements (title, company, experience, salary, etc.)
+- **Output**: Detailed job description with responsibilities, requirements, benefits
+- **Technology**: LangChain + OpenAI GPT
 
-## 🚀 Getting Started
+#### 2. **Resume Analyzer Agent** (Port 8002)
+- **Purpose**: Analyze resumes against job descriptions
+- **Input**: Resume file + Job description
+- **Output**: Analysis score, strengths, weaknesses, recommendations
+- **Technology**: LangGraph workflow + OpenAI GPT
+
+#### 3. **Interview Scheduler Agent** (Port 8003)
+- **Purpose**: Schedule interviews and send automated emails
+- **Input**: Candidate data + Interview details
+- **Output**: Scheduled interviews with email confirmations
+- **Technology**: SMTP + Calendar integration
+
+#### 4. **Root Agent Coordinator** (Port 8000)
+- **Purpose**: Central gateway and request router
+- **Functions**:
+  - Route requests to appropriate agents
+  - Transform data between frontend and agent formats
+  - Provide unified API interface
+  - Handle error responses
+
+## 🛠️ Technology Stack
+
+### Backend
+- **Python 3.9+**
+- **FastAPI** - REST API framework
+- **LangChain** - AI/LLM framework
+- **LangGraph** - Workflow orchestration
+- **OpenAI GPT** - AI model
+- **Pydantic** - Data validation
+- **Uvicorn** - ASGI server
+
+### Frontend
+- **Next.js 15** - React framework
+- **TypeScript** - Type safety
+- **Chakra UI** - Component library
+- **Axios** - HTTP client
+- **React Hook Form** - Form management
+
+### Data Storage
+- **File-based storage** (JSON, TXT)
+- **Structured data directories**
+- **Email templates** (HTML)
+
+## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.9+
+- Node.js 18+
 - OpenAI API key
-- Tesseract OCR (for image processing)
 
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd hr-agent
-   ```
-
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Set up environment variables**
-   ```bash
-   cp env_example.txt .env
-   # Edit .env and add your OpenAI API key
-   ```
-
-4. **Install Tesseract OCR** (for image processing)
-   - **Windows**: Download from https://github.com/UB-Mannheim/tesseract/wiki
-   - **macOS**: `brew install tesseract`
-   - **Linux**: `sudo apt-get install tesseract-ocr`
-
-### Usage
-
-#### 🖥️ **CLI Application**
+### 1. Environment Setup
 ```bash
-python main.py
+# Clone the repository
+git clone <repository-url>
+cd hr-agent
+
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Install frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
-#### 🌐 **Web Interface**
+### 2. Environment Configuration
 ```bash
-python -m streamlit run ui/hr_agent_ui.py --server.port 8501
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your OpenAI API key
+OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-## 📋 Usage Examples
+### 3. Start Services
+```bash
+# Start all services (recommended)
+python start_services.py
 
-### Generate Job Description
-1. Navigate to "Generate Job Description"
-2. Fill in job details (title, company, experience, etc.)
-3. Click "Generate Job Description"
-4. Review and save the generated JD
+# Or start individually:
+# Terminal 1: Root Agent
+python -m uvicorn agents.root_agent.api:app --host 0.0.0.0 --port 8000
 
-### Analyze Resume
-1. Navigate to "Analyze Resume"
-2. Select a saved job description
-3. Upload resume file (PDF, DOCX, TXT, JPG, JPEG)
-4. Click "Analyze Resume"
-5. Review detailed analysis results
+# Terminal 2: JD Generator
+python -m uvicorn agents.jd_generator.api:app --host 0.0.0.0 --port 8001
+
+# Terminal 3: Resume Analyzer
+python -m uvicorn agents.resume_analyzer.api:app --host 0.0.0.0 --port 8002
+
+# Terminal 4: Interview Scheduler
+python -m uvicorn agents.interview_scheduler.api:app --host 0.0.0.0 --port 8003
+
+# Terminal 5: Frontend
+cd frontend && npm run dev
+```
+
+### 4. Access the Application
+- **Frontend**: http://localhost:3000
+- **Root Agent API**: http://localhost:8000
+- **JD Generator API**: http://localhost:8001
+- **Resume Analyzer API**: http://localhost:8002
+- **Interview Scheduler API**: http://localhost:8003
+
+## 📋 API Endpoints
+
+### Root Agent Gateway (Port 8000)
+```
+GET    /health                    # System health check
+GET    /agents                    # List all agents
+GET    /jd/list                   # List job descriptions
+POST   /jd/generate               # Generate job description
+POST   /jd/save                   # Save job description
+POST   /resume/analyze            # Analyze resume
+GET    /resume/history            # Get analysis history
+POST   /interview/schedule        # Schedule interview
+GET    /interview/templates       # Get email templates
+POST   /ai/assist                 # AI assistant routing
+```
+
+### JD Generator Agent (Port 8001)
+```
+GET    /health                    # Health check
+POST   /generate                  # Generate JD
+POST   /save                      # Save JD
+GET    /list                      # List JDs
+```
+
+### Resume Analyzer Agent (Port 8002)
+```
+GET    /health                    # Health check
+POST   /analyze                   # Analyze resume
+GET    /history                   # Analysis history
+```
+
+### Interview Scheduler Agent (Port 8003)
+```
+GET    /health                    # Health check
+POST   /schedule                  # Schedule interview
+GET    /templates                 # Email templates
+GET    /slots                     # Available slots
+```
 
 ## 🔧 Configuration
 
-The system uses a centralized configuration system:
+### Environment Variables
+```bash
+# OpenAI Configuration
+OPENAI_API_KEY=your_api_key
+OPENAI_MODEL=gpt-4
+OPENAI_TEMPERATURE=0.7
 
-```json
-{
-  "system": {
-    "name": "HR Agent Suite",
-    "version": "1.0.0"
-  },
-  "agents": {
-    "jd_generator": {
-      "enabled": true,
-      "model": "gpt-4",
-      "temperature": 0.7
-    },
-    "resume_analyzer": {
-      "enabled": true,
-      "model": "gpt-4",
-      "temperature": 0.3
-    }
-  },
-  "analysis": {
-    "score_weights": {
-      "skills": 0.4,
-      "experience": 0.35,
-      "formatting": 0.25
-    }
-  }
-}
+# Agent Configuration
+JD_GENERATOR_PORT=8001
+RESUME_ANALYZER_PORT=8002
+INTERVIEW_SCHEDULER_PORT=8003
+ROOT_AGENT_PORT=8000
+
+# SMTP Configuration (for email sending)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your_email@gmail.com
+SMTP_PASSWORD=your_app_password
 ```
 
-## 📊 Data Storage
+### Data Directories
+The system uses file-based storage in the `data/` directory:
+- `data/job_descriptions/` - Generated job descriptions
+- `data/resumes/` - Uploaded resume files
+- `data/analysis_results/` - Resume analysis results
+- `data/email_templates/` - Email templates
+- `data/scheduling/` - Interview schedules
 
-### Job Descriptions
-- **Location**: `data/job_descriptions/`
-- **Format**: `.txt` files with corresponding `.json` metadata
-- **Naming**: `{job_title}_{company_name}_job_description.txt`
+## 🎯 Features
 
-### Resumes
-- **Location**: `data/resumes/`
-- **Format**: `.txt` files
-- **Support**: PDF, DOCX, TXT, JPG, JPEG
+### Job Description Generator
+- ✅ AI-powered job description creation
+- ✅ Customizable job requirements
+- ✅ Industry-specific templates
+- ✅ Export to multiple formats
 
-### Analysis Results
-- **Location**: `data/analysis_results/`
-- **Format**: `.json` files with detailed analysis
-- **Naming**: `{candidate_name}_analysis_{timestamp}.json`
+### Resume Analyzer
+- ✅ AI-powered resume analysis
+- ✅ Skills matching against job descriptions
+- ✅ Experience relevance scoring
+- ✅ Detailed feedback and recommendations
+- ✅ Analysis history tracking
 
-## 🔍 System Status
+### Interview Scheduler
+- ✅ Automated interview scheduling
+- ✅ Email notifications
+- ✅ Calendar integration
+- ✅ Template management
+- ✅ Candidate tracking
 
-The root agent provides comprehensive system status:
+### Frontend Features
+- ✅ Modern, responsive UI
+- ✅ Real-time updates
+- ✅ File upload support
+- ✅ Progress indicators
+- ✅ Error handling
+- ✅ Mobile-friendly design
 
-- **Agent Health**: Status of all sub-agents
-- **Data Statistics**: File counts and storage information
-- **Configuration**: Current system settings
-- **Error Logging**: Centralized error tracking
+## 🔒 Security & Best Practices
 
-## 🛠️ Development
+### Security Features
+- CORS middleware enabled
+- Input validation with Pydantic
+- Error handling and logging
+- Environment variable configuration
+- File upload restrictions
 
-### Adding New Agents
-1. Create new directory in `agents/`
-2. Implement agent logic
-3. Register with root agent
-4. Update configuration
+### Code Quality
+- Type hints throughout
+- Modular architecture
+- Separation of concerns
+- Comprehensive error handling
+- Clean code principles
 
-### Extending Functionality
-1. Modify root agent for new coordination logic
-2. Update utility services as needed
-3. Extend UI for new features
-4. Update configuration schema
+## 🚀 Deployment
 
-## 📝 License
+### Development
+```bash
+python start_services.py
+```
 
-This project is licensed under the MIT License.
+### Production
+```bash
+# Use process managers like PM2 or systemd
+# Configure reverse proxy (nginx)
+# Set up SSL certificates
+# Use environment-specific configurations
+```
+
+### Docker (Future Enhancement)
+```dockerfile
+# Dockerfile example for production
+FROM python:3.9-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD ["python", "start_services.py"]
+```
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Test thoroughly
+4. Add tests if applicable
 5. Submit a pull request
 
-## 📞 Support
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🆘 Support
 
 For support and questions:
 - Create an issue in the repository
 - Check the documentation
-- Review the configuration guide
+- Review the API endpoints
+
+## 🔄 Version History
+
+- **v1.0.0** - Initial release with modular agent architecture
+- **v1.1.0** - Added React frontend with Chakra UI
+- **v1.2.0** - Enhanced resume analysis with LangGraph workflows
+- **v1.3.0** - Improved error handling and API stability
 
 ---
 
-**🎉 Welcome to the HR Agent Suite - Where AI Meets HR Excellence!** 
+**PHOENKAI AI - HR Agent Suite** - Empowering HR professionals with AI-driven automation. 
