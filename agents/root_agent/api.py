@@ -190,96 +190,23 @@ async def suggest_interview_slots(date: str, duration: int = None):
 
 @app.post("/ai/assist")
 async def ai_assistant(request: Dict[str, Any]):
-    query = request.get("query", "")
-    """AI assistant that routes queries to appropriate agents and parses job details"""
+    """AI Assistant with Neo4j memory integration"""
     try:
-        query_lower = query.lower()
+        query = request.get("query", "")
         
-        # Check if this looks like a job description request
-        job_keywords = ["developer", "engineer", "manager", "analyst", "specialist", "consultant", "designer", "architect", "salary", "experience", "company", "location", "skills", "remote", "full time", "part time"]
+        # Use the new memory-enhanced coordinator
+        result = coordinator.process_query_with_memory(query)
         
-        if any(keyword in query_lower for keyword in job_keywords):
-            # Parse job details from the query using LLM
-            parsing_result = coordinator.parse_job_details_from_text(query)
-            
-            if parsing_result.get("success", False):
-                # Successful parsing
-                return {
-                    "success": True,
-                    "agent": "jd_generator",
-                    "action": "parse_and_generate_job_description",
-                    "message": parsing_result.get("message", "I've parsed your job requirements. Here are the extracted details:"),
-                    "query": query,
-                    "parsed_data": parsing_result.get("parsed_data", {}),
-                    "suggested_action": "Navigate to Job Description Generator to review and generate the JD"
-                }
-            else:
-                # Validation issues or errors
-                return {
-                    "success": False,
-                    "agent": "jd_generator",
-                    "action": "validation_required",
-                    "message": parsing_result.get("message", "Please clarify the following issues:"),
-                    "query": query,
-                    "validation_issues": parsing_result.get("validation_issues", []),
-                    "suggestions": parsing_result.get("suggestions", []),
-                    "parsed_data": parsing_result.get("parsed_data", {}),
-                    "suggested_action": "Please provide more details or correct the issues mentioned above"
-                }
+        return {
+            "success": result["success"],
+            "message": result["message"],
+            "type": result["type"],
+            "data": result.get("data", {}),
+            "query": query
+        }
         
-        elif any(word in query_lower for word in ["job", "jd", "generate", "create", "description"]):
-            # Route to JD Generator
-            return {
-                "success": True,
-                "agent": "jd_generator",
-                "action": "generate_job_description",
-                "message": "Routing to Job Description Generator",
-                "query": query
-            }
-        
-        elif any(word in query_lower for word in ["resume", "analyze", "candidate", "score", "evaluate"]):
-            # Route to Resume Analyzer
-            return {
-                "success": True,
-                "agent": "resume_analyzer", 
-                "action": "analyze_resume",
-                "message": "Routing to Resume Analyzer",
-                "query": query
-            }
-        
-        elif any(word in query_lower for word in ["interview", "schedule", "meeting", "calendar", "email"]):
-            # Route to Interview Scheduler
-            return {
-                "success": True,
-                "agent": "interview_scheduler",
-                "action": "schedule_interview", 
-                "message": "Routing to Interview Scheduler",
-                "query": query
-            }
-        
-        elif any(word in query_lower for word in ["status", "health", "check"]):
-            # Get system status
-            status = coordinator.get_system_status()
-            return {
-                "success": True,
-                "agent": "root",
-                "action": "system_status",
-                "message": "System status retrieved",
-                "status": status
-            }
-        
-        else:
-            # Default response
-            return {
-                "success": True,
-                "agent": "root",
-                "action": "general_query",
-                "message": "I can help you with job descriptions, resume analysis, and interview scheduling. Please specify what you need.",
-                "query": query
-            }
-            
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI assistant failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI Assistant failed: {str(e)}")
 
 # ==================== BACKWARD COMPATIBILITY ====================
 

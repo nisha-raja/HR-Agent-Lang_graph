@@ -29,6 +29,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import MainLayout from '@/components/Layout/MainLayout'
 import { rootAgentService, apiUtils } from '@/services/api'
+import DynamicTable from '@/components/DynamicTable'
 
 interface SystemStatus {
   status: string
@@ -72,62 +73,44 @@ export default function Dashboard() {
 
   const handleAIMessage = async (message: string) => {
     try {
-      setAiQuery(message)
+      const response = await fetch('http://localhost:8000/ai/assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: message })
+      });
       
-      // Use AI assistant for parsing and routing
-      const response = await rootAgentService.aiAssistant(message)
+      const data = await response.json();
       
-      if (response.action === 'parse_and_generate_job_description' && response.parsed_data) {
-        // Navigate to JD Generator with pre-filled data
-        router.push(`/people/jd?data=${encodeURIComponent(JSON.stringify(response.parsed_data))}`)
-        toast({
-          title: 'AI Assistant',
-          description: response.message,
-          status: 'success',
-          duration: 3000,
-          isClosable: true,
-        })
-      } else if (response.action === 'validation_required' || !response.success) {
-        // Show validation issues to user
-        const issues = response.validation_issues || []
-        const suggestions = response.suggestions || []
-        
-        let description = response.message + '\n\n'
-        if (issues.length > 0) {
-          description += 'Issues:\n' + issues.map((issue: string, index: number) => `${index + 1}. ${issue}`).join('\n')
-        }
-        if (suggestions.length > 0) {
-          description += '\n\nSuggestions:\n' + suggestions.map((suggestion: string, index: number) => `${index + 1}. ${suggestion}`).join('\n')
-        }
-        
-        toast({
-          title: response.action === 'validation_required' ? 'Validation Required' : 'Processing Error',
-          description: description,
-          status: 'warning',
-          duration: 10000,
-          isClosable: true,
+      if (data.success) {
+        // Instead of toast, set the response data for table display
+        setQueryResponse({
+          type: data.type,
+          message: data.message,
+          data: data.data,
+          query: message,
+          timestamp: new Date().toLocaleString()
         })
       } else {
-        // Handle other AI assistant responses
-        toast({
-          title: 'AI Assistant',
-          description: response.message,
-          status: 'info',
-          duration: 3000,
-          isClosable: true,
+        // Show error in a different way
+        setQueryResponse({
+          type: 'error',
+          message: data.message,
+          data: null,
+          query: message,
+          timestamp: new Date().toLocaleString()
         })
       }
     } catch (error) {
-      console.error('AI Assistant error:', error)
-      toast({
-        title: 'Error',
-        description: 'Failed to process AI request',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
+      console.error('Error:', error)
+      setQueryResponse({
+        type: 'error',
+        message: 'Failed to get response from AI assistant',
+        data: null,
+        query: message,
+        timestamp: new Date().toLocaleString()
       })
     }
-  }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -181,6 +164,9 @@ export default function Dashboard() {
       path: '/analytics',
     },
   ]
+
+  // Add state for query response
+  const [queryResponse, setQueryResponse] = useState<any>(null)
 
   if (loading) {
     return (
@@ -310,22 +296,15 @@ export default function Dashboard() {
         </VStack>
 
         {/* AI Assistant Demo */}
-        {aiQuery && (
-          <Box mt={8} p={4} bg="brand.50" borderRadius="lg" border="1px" borderColor="brand.200">
-            <VStack spacing={3} align="start">
-              <HStack>
-                <Icon as={Zap} color="brand.500" boxSize={5} />
-                <Text fontWeight="semibold" color="brand.700">
-                  AI Assistant Response
-                </Text>
-              </HStack>
-              <Text fontSize="sm" color="gray.700">
-                Query: &ldquo;{aiQuery}&rdquo;
-              </Text>
-              <Text fontSize="sm" color="gray.600">
-                Processing your request...
-              </Text>
-            </VStack>
+        {queryResponse && (
+          <Box mt={6}>
+            <DynamicTable 
+              type={queryResponse.type}
+              message={queryResponse.message}
+              data={queryResponse.data}
+              query={queryResponse.query}
+              timestamp={queryResponse.timestamp}
+            />
           </Box>
         )}
       </Box>

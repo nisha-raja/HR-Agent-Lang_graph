@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 import sys
 import re
+import os
 
 # Add parent directories to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -13,6 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from agents.jd_generator import JDGeneratorAgent
 from agents.resume_analyzer import ResumeAnalyzerAgent
 from agents.interview_scheduler import InterviewSchedulerAgent
+from .memory_manager import Neo4jMemoryManager
 
 class RootAgentCoordinator:
     """Pure Coordinator Agent - Routes requests to appropriate sub-agents"""
@@ -22,6 +24,7 @@ class RootAgentCoordinator:
         self.jd_generator = JDGeneratorAgent()
         self.resume_analyzer = ResumeAnalyzerAgent()
         self.interview_scheduler = InterviewSchedulerAgent()
+        self.memory = Neo4jMemoryManager()
     
     # ==================== COORDINATION METHODS ====================
     
@@ -294,7 +297,7 @@ Return ONLY the JSON object, no additional text."""
             if salary_match:
                 salary = salary_match.group(1).replace(',', '')
                 parsed_data["salary_range"] = f"${salary}"
-            
+        
             # Extract experience
             exp_match = re.search(r'(\d+)\s*(?:year|yr)s?\s*experience', text_lower)
             if exp_match:
@@ -312,7 +315,7 @@ Return ONLY the JSON object, no additional text."""
             words = text.split(',')[0].strip().split()
             if words:
                 parsed_data["job_title"] = words[0].title()
-            
+        
             # Extract company name
             company_match = re.search(r'(\w+)\s+company', text_lower)
             if company_match:
@@ -412,12 +415,207 @@ Return ONLY the JSON object, no additional text."""
         except Exception as e:
             return []
     
-    def suggest_interview_slots(self, date: str, duration: int = None) -> List[Dict[str, str]]:
+    def suggest_interview_slots(self, date: str, duration: int = None) -> Dict[str, Any]:
         """Route interview slots suggestion to Interview Scheduler Agent"""
         try:
             return self.interview_scheduler.suggest_interview_slots(date, duration)
         except Exception as e:
             return []
+    
+    # ==================== NEO4J MEMORY INTEGRATION ====================
+    
+    def process_query_with_memory(self, query: str) -> Dict[str, Any]:
+        """Process user query with Neo4j memory integration using LLM for intelligent classification"""
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import HumanMessage, SystemMessage
+            
+            # Check if OpenAI API key is available
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                return {
+                    "success": False,
+                    "type": "error",
+                    "message": "OpenAI API key is not configured"
+                }
+            
+            # Initialize LLM
+            llm = ChatOpenAI(
+                model="gpt-4",
+                temperature=0.1,
+                api_key=api_key
+            )
+            
+            # System prompt for query classification
+            system_prompt = """Act like an intelligent query classifier designed specifically for an HR system. Your role is to carefully analyze each user query, interpret the intent behind it, and then classify it into the most accurate category based on predefined options.  
+
+OBJECTIVE:  
+Your goal is to return a well-structured JSON response that includes the most likely category, a confidence score, and a concise explanation of your reasoning.  
+
+AVAILABLE CATEGORIES:  
+1. "company_info" – Questions about the company itself, its history, mission, size, or industry.  
+2. "job_search" – Questions about available jobs, positions, roles, hiring, or careers.  
+3. "skills_analysis" – Questions about skills, technologies, tech stack, or technical requirements.  
+4. "department_info" – Questions about departments, teams, or organizational structure.  
+5. "general" – General or unclear queries.  
+6. "salary_info" – Questions specifically about salary, pay, or compensation.  
+
+CLASSIFICATION RULES:  
+- Salary-related questions → "salary_info"  
+- Job availability questions → "job_search"  
+- Company overview questions → "company_info"  
+- If unclear, default to "general" but explain why.  
+
+OUTPUT FORMAT:  
+Always return ONLY a JSON object structured as follows:  
+{  
+    "category": "string (must be one of the categories above)",  
+    "confidence": "number (0.0 to 1.0)",  
+    "reasoning": "string (brief but clear explanation of why this category was chosen)"  
+}  
+
+EXAMPLES:  
+- "tell me about your company" → { "category": "company_info", "confidence": 0.95, "reasoning": "The user is asking for company details, which falls under company_info." }  
+- "what jobs are available" → { "category": "job_search", "confidence": 0.97, "reasoning": "The query explicitly asks about job availability, which maps to job_search." }  
+- "what skills do you need" → { "category": "skills_analysis", "confidence": 0.92, "reasoning": "The user is asking about required skills, so this fits under skills_analysis." }  
+- "what departments do you have" → { "category": "department_info", "confidence": 0.94, "reasoning": "The user is asking about organizational structure, so this fits under department_info." }  
+- "how much do you pay software engineers" → { "category": "salary_info", "confidence": 0.96, "reasoning": "This is a compensation-related query, so it falls under salary_info." }  
+- "hello" → { "category": "general", "confidence": 0.80, "reasoning": "The query is vague and does not request HR-specific information, so it defaults to general." }  
+
+Take a deep breath and work on this problem step-by-step.  
+"""
+
+            # Get LLM classification
+            response = llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=f"Classify this query: {query}")
+            ])
+            
+            # Parse the classification
+            import json
+            try:
+                classification = json.loads(response.content.strip())
+                category = classification.get("category", "general")
+                confidence = classification.get("confidence", 0.0)
+                
+                # Route based on LLM classification
+                if category == "company_info":
+                    company_info = self.memory.get_company_info()
+                    if company_info:
+                        return {
+                            "success": True,
+                            "type": "company_info",
+                            "message": f"Here's information about {company_info['name']}:",
+                            "data": {
+                                "name": company_info['name'],
+                                "industry": company_info['industry'],
+                                "size": company_info['size'],
+                                "about": company_info['about']
+                            },
+                            "llm_reasoning": classification.get("reasoning", "")
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "type": "company_info",
+                            "message": "Company information not found in database."
+                        }
+                
+                elif category == "job_search":
+                    jobs = self.memory.find_jobs_by_query(query)
+                    if jobs:
+                        return {
+                            "success": True,
+                            "type": "job_search",
+                            "message": f"I found {len(jobs)} relevant job positions:",
+                            "data": {
+                                "jobs": jobs
+                            },
+                            "llm_reasoning": classification.get("reasoning", "")
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "type": "job_search",
+                            "message": "No jobs found matching your criteria. Try searching for specific skills like 'Java', 'React', or 'Python'."
+                        }
+                
+                elif category == "skills_analysis":
+                    skills = self.memory.get_skills_analysis()
+                    if skills:
+                        return {
+                            "success": True,
+                            "type": "skills_analysis",
+                            "message": "Here are the most in-demand skills at our company:",
+                            "data": {
+                                "skills": skills
+                            },
+                            "llm_reasoning": classification.get("reasoning", "")
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "type": "skills_analysis",
+                            "message": "Skills information not available."
+                        }
+                
+                elif category == "department_info":
+                    departments = self.memory.get_department_info()
+                    if departments:
+                        return {
+                            "success": True,
+                            "type": "department_info",
+                            "message": "Here are our departments and available positions:",
+                            "data": {
+                                "departments": departments
+                            },
+                            "llm_reasoning": classification.get("reasoning", "")
+                        }
+                    else:
+                        return {
+                            "success": False,
+                            "type": "department_info",
+                            "message": "Department information not available."
+                        }
+                
+                else:  # general
+                    return {
+                        "success": False,
+                        "type": "general",
+                        "message": "I can help you with:\n- Company information\n- Job searches\n- Skills analysis\n- Department information\n\nTry asking about specific jobs, skills, or company details!",
+                        "llm_reasoning": classification.get("reasoning", "")
+                    }
+            
+            except json.JSONDecodeError as e:
+                # Fallback to basic keyword matching if LLM fails
+                return self._fallback_query_processing(query)
+        
+        except Exception as e:
+            # Fallback to basic keyword matching if LLM fails
+            return self._fallback_query_processing(query)
+
+    def _fallback_query_processing(self, query: str) -> Dict[str, Any]:
+        """Fallback method when LLM classification fails"""
+        query_lower = query.lower()
+        
+        # Simple fallback logic
+        if any(word in query_lower for word in ['job', 'position', 'role', 'available']):
+            jobs = self.memory.find_jobs_by_query(query)
+            if jobs:
+                return {
+                    "success": True,
+                    "type": "job_search",
+                    "message": f"I found {len(jobs)} relevant job positions:",
+                    "data": {
+                        "jobs": jobs
+                    }
+                }
+        
+        return {
+            "success": False,
+            "type": "general",
+            "message": "I can help you with:\n- Company information\n- Job searches\n- Skills analysis\n- Department information\n\nTry asking about specific jobs, skills, or company details!"
+        }
     
     # ==================== BACKWARD COMPATIBILITY ====================
     
